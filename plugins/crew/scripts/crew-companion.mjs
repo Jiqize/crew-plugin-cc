@@ -76,19 +76,27 @@ function parseArgs(argv) {
   return { cmd, opts };
 }
 
-// 各 CLI 的无头调用映射（review 为只读语义）
-function buildArgv(cli, { review, resume, model, task }) {
+// 各 CLI 的无头调用映射（review 为只读语义）。
+// stream 打开各家的 JSON 事件流（供 progress/result 解析）；sessionId 用于精确续跑（omp/opencode 支持）。
+function buildArgv(cli, { review, resume, sessionId, model, task, stream }) {
   const t = review
     ? `Read-only review task. Do NOT modify, create, or delete any files.\n\n${task}`
     : task;
   switch (cli) {
     case "omp":
-      return ["omp", "-p", ...(resume ? ["-c"] : []), ...(model ? ["--model", model] : []), t];
+      return [
+        "omp", "-p",
+        ...(stream ? ["--mode", "json"] : []),
+        ...(resume ? (sessionId ? ["-r", sessionId] : ["-c"]) : []),
+        ...(model ? ["--model", model] : []),
+        t
+      ];
     case "grok":
       return [
         "grok", "-p", t,
         "--permission-mode", review ? "plan" : "acceptEdits",
-        ...(resume ? ["-c"] : []),
+        ...(stream ? ["--output-format", "streaming-json"] : []),
+        ...(resume ? (sessionId ? ["-r", sessionId] : ["-c"]) : []),
         ...(model ? ["--model", model] : [])
       ];
     case "agy":
@@ -102,12 +110,100 @@ function buildArgv(cli, { review, resume, model, task }) {
       return [
         "opencode", "run", t,
         ...(review ? [] : ["--auto"]),
-        ...(resume ? ["-c"] : []),
+        ...(stream ? ["--format", "json"] : []),
+        ...(resume ? (sessionId ? ["-s", sessionId] : ["-c"]) : []),
         ...(model ? ["-m", model] : [])
       ];
     default:
       throw new Error(`unknown cli: ${cli}`);
   }
+}
+
+// 解析各 CLI 的 JSON 事件日志 → 活动轨迹 / 最终回答 / 会话 id / 成本
+function parseEvents(cli, text) {
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  const activities = [];
+  let finalText = "";
+  let sessionId = null;
+  let cost = null;
+  const push = (s) => {
+    if (s && s.trim()) activities.push(s.replace(/\s+/g, " ").trim().slice(0, 120));
+  };
+  if (cli === "grok") {
+    let thought = "";
+    let answer = "";
+    for (const l of lines) {
+      let e;
+      try { e = JSON.parse(l); } catch { continue; }
+      if (e.type === "thought") thought += e.data || "";
+      else if (e.type === "text") answer += e.data || "";
+      else {
+        if (e.sessionId) sessionId = e.sessionId;
+        push(`[${e.type}] ${JSON.stringify(e).slice(0, 100)}`);
+      }
+    }
+    if (thought) push(`思考: ${thought.slice(0, 100)}`);
+    if (answer) push(`输出: ${answer.slice(0, 100)}`);
+    finalText = answer;
+  } else if (cli === "omp") {
+    for (const l of lines) {
+      let e;
+      try { e = JSON.parse(l); } catch { continue; }
+      if (e.type === "session") sessionId = e.id;
+      else if (e.type === "message_end" && e.message?.role === "assistant") {
+        for (const c of e.message.content || []) {
+          if (c.type === "thinking") push(`思考: ${c.thinking}`);
+          else if (c.type === "toolCall") push(`工具 ${c.name}: ${JSON.stringify(c.arguments ?? {})}`);
+          else if (c.type === "text") { finalText = c.text || ""; push(`输出: ${c.text}`); }
+        }
+      }
+    }
+  } else if (cli === "opencode") {
+    for (const l of lines) {
+      let e;
+      try { e = JSON.parse(l); } catch { continue; }
+      if (e.sessionID) sessionId = e.sessionID;
+      const p = e.part || {};
+      if (e.type === "tool_use") push(`工具 ${p.tool || "?"}${p.state?.status ? ` (${p.state.status})` : ""}`);
+      else if (e.type === "text") { finalText += (finalText ? "\n" : "") + (p.text || ""); push(`输出: ${p.text}`); }
+      else if (e.type === "step_finish" && p.cost != null) cost = (cost || 0) + p.cost;
+    }
+    if (cost != null) push(`成本: $${cost.toFixed(4)}`);
+  } else {
+    // agy 等无事件流的 CLI：原文即结果
+    finalText = text.trim();
+    for (const l of lines.slice(-10)) push(l);
+  }
+  return { activities, finalText: finalText.trim(), sessionId, cost };
+}
+
+// 从日志中提取并回写会话 id
+function captureSession(job) {
+  if (job.sessionId || !fs.existsSync(job.logFile)) return job;
+  const parsed = parseEvents(job.stream ? job.cli : "_plain", fs.readFileSync(job.logFile, "utf8"));
+  if (parsed.sessionId) {
+    job.sessionId = parsed.sessionId;
+    writeJson(jobFile(job.id), job);
+  }
+  return job;
+}
+
+// 创建后台任务记录并派生 worker
+function startBackgroundJob(fields) {
+  ensureDirs();
+  const job = {
+    status: "running",
+    startedAt: new Date().toISOString(),
+    logFile: path.join(JOBS_DIR, `${fields.id}.log`),
+    ...fields
+  };
+  writeJson(jobFile(job.id), job);
+  const child = spawn(process.execPath, [SELF, "_exec", job.id], { detached: true, stdio: "ignore" });
+  child.unref();
+  console.log(`已启动后台任务 ${job.id}（${job.cli}/${job.mode}）。`);
+  console.log(`看进度 /crew:progress ${job.id}，取结果 /crew:result ${job.id}，取消 /crew:cancel ${job.id}。`);
+  if (job.worktree) console.log(`隔离 worktree：${job.worktree}`);
+  return job;
 }
 
 function markSession(cwd, cli, task) {
@@ -140,31 +236,24 @@ function cmdRun(opts) {
     worktree = makeWorktree(launchCwd, id);
     cwd = worktree;
   }
+  // 后台任务对支持 JSON 事件流的 CLI 打开流式日志，供 progress/result 解析
+  const stream = !!opts.background && cli !== "agy";
   const argv = buildArgv(cli, {
     review: !!opts.review,
     resume: !!opts.resume,
     model: opts.model,
-    task: opts.task
+    task: opts.task,
+    stream
   });
   markSession(launchCwd, cli, opts.task);
 
   if (opts.background) {
-    ensureDirs();
-    const job = {
+    startBackgroundJob({
       id, cli,
       mode: opts.review ? "review" : "delegate",
       task: opts.task.slice(0, 500),
-      cwd, worktree, argv,
-      status: "running",
-      startedAt: new Date().toISOString(),
-      logFile: path.join(JOBS_DIR, `${id}.log`)
-    };
-    writeJson(jobFile(id), job);
-    const child = spawn(process.execPath, [SELF, "_exec", id], { detached: true, stdio: "ignore" });
-    child.unref();
-    console.log(`已启动后台任务 ${id}（${cli}/${job.mode}）。`);
-    console.log(`查进度 /crew:status，看结果 /crew:result ${id}，取消 /crew:cancel ${id}。`);
-    if (worktree) console.log(`隔离 worktree：${worktree}`);
+      cwd, worktree, argv, stream
+    });
     return;
   }
 
@@ -235,12 +324,71 @@ function cmdStatus(idArg, asJson) {
 function cmdResult(idArg) {
   const jobs = loadJobs(idArg);
   if (!jobs.length) return fail(idArg ? `没有任务 ${idArg}` : "没有后台任务");
-  const job = jobs[0]; // 不带 id 则取最近一个
+  const job = captureSession(jobs[0]); // 不带 id 则取最近一个
   console.log(`[crew] ${job.id}  ${job.status}  ${job.cli}/${job.mode}  ${job.task.slice(0, 100)}`);
   if (job.worktree) console.log(`[crew] 隔离 worktree：${job.worktree}`);
   const log = fs.existsSync(job.logFile) ? fs.readFileSync(job.logFile, "utf8").trim() : "";
-  console.log(log || "（暂无输出）");
-  if (job.status === "running") console.log("\n[crew] 任务仍在运行，稍后再取结果。");
+  if (job.stream) {
+    const parsed = parseEvents(job.cli, log);
+    console.log(parsed.finalText || "（暂无最终回答）");
+    if (parsed.cost != null) console.log(`\n[crew] 成本：$${parsed.cost.toFixed(4)}`);
+    console.log(`[crew] 原始事件日志：${job.logFile}`);
+  } else {
+    console.log(log || "（暂无输出）");
+  }
+  if (job.status === "running") console.log("\n[crew] 任务仍在运行，用 /crew:progress 看它正在干嘛。");
+}
+
+// 实时进度：解析事件日志，显示任务正在/刚刚做什么
+function cmdProgress(idArg) {
+  const jobs = loadJobs(idArg);
+  if (!jobs.length) return fail(idArg ? `没有任务 ${idArg}` : "没有后台任务");
+  const job = captureSession(jobs[0]);
+  const end = job.endedAt ? new Date(job.endedAt) : new Date();
+  const elapsed = Math.round((end - new Date(job.startedAt)) / 1000);
+  console.log(`[crew] ${job.id}  ${job.status}  ${job.cli}/${job.mode}  已运行 ${elapsed}s`);
+  console.log(`[crew] 任务：${job.task.slice(0, 100)}`);
+  if (job.sessionId) console.log(`[crew] 会话：${job.sessionId}`);
+  const log = fs.existsSync(job.logFile) ? fs.readFileSync(job.logFile, "utf8") : "";
+  const parsed = parseEvents(job.stream ? job.cli : "_plain", log);
+  const recent = parsed.activities.slice(-12);
+  console.log(recent.length ? "\n最近活动：" : "\n（还没有活动输出）");
+  for (const a of recent) console.log(`  ${a}`);
+  if (job.status === "running") console.log("\n[crew] 仍在运行，再次 /crew:progress 可刷新。");
+}
+
+// 追问：向已结束任务的会话追加一条消息（omp/opencode 按会话 id 精确续跑）
+function cmdSend(opts) {
+  const jobs = loadJobs(opts._[0]);
+  if (!jobs.length) return fail("没有可追问的后台任务");
+  const job = captureSession(jobs[0]);
+  if (!opts.task) return fail("缺少追问内容（放在 -- 之后）");
+  if (job.status === "running") return fail(`任务 ${job.id} 还在运行，等它结束（/crew:progress 看进度）或先 /crew:cancel`);
+  const stream = !!opts.background && job.cli !== "agy";
+  const argv = buildArgv(job.cli, {
+    review: job.mode === "review",
+    resume: true,
+    sessionId: job.sessionId,
+    model: opts.model,
+    task: opts.task,
+    stream
+  });
+  markSession(job.cwd, job.cli, opts.task);
+  if (opts.background) {
+    startBackgroundJob({
+      id: "c-" + crypto.randomBytes(3).toString("hex"),
+      cli: job.cli,
+      mode: job.mode,
+      task: opts.task.slice(0, 500),
+      cwd: job.cwd,
+      worktree: job.worktree,
+      parent: job.id,
+      argv, stream
+    });
+    return;
+  }
+  const child = spawn(argv[0], argv.slice(1), { cwd: job.cwd, stdio: ["ignore", "inherit", "inherit"] });
+  child.on("exit", (code) => process.exit(code ?? 1));
 }
 
 function cmdCancel(idArg) {
@@ -288,10 +436,12 @@ switch (cmd) {
   case "_exec": cmdExec(opts._[0]); break;
   case "status": cmdStatus(opts._[0], !!opts.json); break;
   case "result": cmdResult(opts._[0]); break;
+  case "progress": cmdProgress(opts._[0]); break;
+  case "send": cmdSend(opts); break;
   case "cancel": cmdCancel(opts._[0]); break;
   case "resume-candidate": cmdResumeCandidate(opts); break;
   case "setup": cmdSetup(); break;
   default:
-    console.log("用法: crew-companion.mjs <run|status|result|cancel|resume-candidate|setup> [flags] [-- task]");
+    console.log("用法: crew-companion.mjs <run|status|result|progress|send|cancel|resume-candidate|setup> [flags] [-- task]");
     process.exit(cmd ? 1 : 0);
 }

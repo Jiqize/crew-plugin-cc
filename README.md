@@ -23,7 +23,9 @@ claude plugin install crew@crew
 | `/crew:race [--by cli1,cli2] [--write] <任务>` | 多 CLI 并行做同一任务，对比选优（--write 时自动 worktree 隔离） |
 | `/crew:pipeline [--impl cli] [--review cli] [--rounds N] <任务>` | 流水线：一个实现 → 另一个审查 → 循环修复直到 LGTM |
 | `/crew:status [id]` | 查看后台任务状态 |
-| `/crew:result [id]` | 取后台任务输出（默认最近一个） |
+| `/crew:progress [id]` | 流式进度：看任务正在干嘛（工具调用、思考、输出、成本） |
+| `/crew:result [id]` | 取后台任务结果（自动解析出最终回答和成本） |
+| `/crew:send [id] <消息>` | 追问：向已结束任务的会话追加消息（omp/grok/opencode 按会话 id 精确续跑） |
 | `/crew:cancel [id]` | 取消运行中的后台任务 |
 | `/crew:setup` | 检查四个 CLI 是否安装可用 |
 
