@@ -2,7 +2,7 @@
 
 在 Claude Code 里把任务委派给其他 agent CLI：**omp (oh-my-pi)、grok、antigravity (agy)、opencode**。
 
-形态参考 [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)，但实现极简：各 CLI 都用自己的无头模式（`-p` / `run`），由一个薄转发子代理 `crew:crew-runner` 统一调用，输出原样返回。
+形态参考 [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)：各 CLI 走自己的无头模式（`-p` / `run`），由确定性运行时 `scripts/crew-companion.mjs` 统一拼命令、管后台任务和会话状态，薄转发子代理 `crew:crew-runner` 只负责调用它，输出原样返回。
 
 ## 安装
 
@@ -20,9 +20,16 @@ claude plugin install crew@crew
 | `/crew:agy <任务>` | 委派给 Antigravity（可改代码） |
 | `/crew:opencode <任务>` | 委派给 opencode（可改代码，--auto） |
 | `/crew:review --by <cli> [--base ref] [关注点]` | 让指定 CLI 只读审查当前改动 |
+| `/crew:status [id]` | 查看后台任务状态 |
+| `/crew:result [id]` | 取后台任务输出（默认最近一个） |
+| `/crew:cancel [id]` | 取消运行中的后台任务 |
 | `/crew:setup` | 检查四个 CLI 是否安装可用 |
 
-通用旗标：`--background`（后台跑，稍后要结果）、`--resume`（继续该 CLI 上次会话）、`--fresh`（强制新会话）、`--model <m>`（指定模型）。
+通用旗标：`--background`（后台跑，companion 返回任务 id）、`--resume`（继续该 CLI 上次会话）、`--fresh`（强制新会话）、`--worktree`（在独立 git worktree 里跑，避免并行互踩）、`--model <m>`（指定模型）。
+
+同一仓库对某 CLI 有过历史会话且未指定 `--resume/--fresh` 时，会像 Codex 插件一样问一次"继续上次还是开新会话"。
+
+状态目录：`~/.crew/`（后台任务日志在 `jobs/`，隔离 worktree 在 `worktrees/`）。
 
 ## 自然语言触发
 
