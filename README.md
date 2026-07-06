@@ -20,6 +20,8 @@ claude plugin install crew@crew
 | `/crew:agy <任务>` | 委派给 Antigravity（可改代码） |
 | `/crew:opencode <任务>` | 委派给 opencode（可改代码，--auto） |
 | `/crew:review --by <cli> [--base ref] [关注点]` | 让指定 CLI 只读审查当前改动 |
+| `/crew:race [--by cli1,cli2] [--write] <任务>` | 多 CLI 并行做同一任务，对比选优（--write 时自动 worktree 隔离） |
+| `/crew:pipeline [--impl cli] [--review cli] [--rounds N] <任务>` | 流水线：一个实现 → 另一个审查 → 循环修复直到 LGTM |
 | `/crew:status [id]` | 查看后台任务状态 |
 | `/crew:result [id]` | 取后台任务输出（默认最近一个） |
 | `/crew:cancel [id]` | 取消运行中的后台任务 |
@@ -30,6 +32,10 @@ claude plugin install crew@crew
 同一仓库对某 CLI 有过历史会话且未指定 `--resume/--fresh` 时，会像 Codex 插件一样问一次"继续上次还是开新会话"。
 
 状态目录：`~/.crew/`（后台任务日志在 `jobs/`，隔离 worktree 在 `worktrees/`）。
+
+## 具名 agent 类型
+
+四个 CLI 各注册了一个一等公民 subagent：`crew:crew-omp`、`crew:crew-grok`、`crew:crew-agy`、`crew:crew-opencode`。除了斜杠命令，CC 原生的 Agent 工具和 Workflow 编排（`agentType: 'crew:crew-grok'`）都能直接调度它们，fan-out / pipeline / judge panel 等编排模式开箱即用。
 
 ## 自然语言触发
 
