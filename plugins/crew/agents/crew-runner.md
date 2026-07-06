@@ -21,6 +21,7 @@ The request you receive specifies: `cli` (omp | grok | agy | opencode), `mode` (
 - background requested → add `--background` (companion detaches the job and prints a task id; return that message verbatim)
 - model specified → add `--model <m>`
 - worktree isolation requested → add `--worktree`
+- specific working directory requested (e.g. an existing worktree) → add `--cwd <dir>`
 
 Rules:
 
