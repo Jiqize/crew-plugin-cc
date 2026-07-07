@@ -1,11 +1,11 @@
-# crew v0.4.0 使用指南
+# crew v0.6.0 使用指南
 
 > **面向首次使用 crew 插件的 Claude Code 用户**  
 > 本指南包含可直接复制运行的命令示例。所有示例假设你已在 Claude Code 会话中，且当前目录是一个 git 仓库（推荐）。
 
 ## 插件是什么？解决什么问题？
 
-`crew` 是一个 Claude Code 插件（版本 0.4.0），用于**把任务委派（delegate）给外部 agent CLI**：
+`crew` 是一个 Claude Code 插件（版本 0.6.0），用于**把任务委派（delegate）给外部 agent CLI**：
 
 - **omp** (oh-my-pi)
 - **grok** (grok.com/build CLI)
@@ -18,12 +18,16 @@
 - **后台长任务管理**：适合耗时编码、分析、审查任务，不阻塞当前会话。
 - **并行与流水线编排**：race 多 CLI 对比、pipeline（实现→审查→修复循环）。
 - **只读审查** + **写操作隔离**：review 永远不改文件；--worktree 让并行写操作互不干扰。
-- **会话连续性**：自动记录上次会话，支持 `--resume` 续跑（omp / opencode / grok 在捕获到 `sessionId` 时用 `-r` 精确续跑；无 `sessionId` 时 grok 退化为 `-c`；agy 固定 `--continue`）。
+- **会话连续性**：`--resume` 自动使用状态里记录的精确会话 id 续跑（omp / opencode / grok 用 `-r` / `-s` 精确续跑；无 `sessionId` 时 grok 退化为 `-c`；agy 固定 `--continue`）。
 - **原样返回输出**：子代理只做转发，不总结、不改写结果。
+- **全量任务追踪**：前台运行也会创建有 id 的任务记录，任何一次运行（前台/后台）都可用 `/crew:send` 追问。告别 v0.4 中"只有后台任务有 id"的摩擦点。
+- **假成功识别**（v0.6.0）：退出码 0 但回合被取消（如 grok `stopReason=Cancelled`）会自动标记为 failed 并说明原因。
+- **委派结果存疑标注**：委派任务无最终产出时会标注"结果存疑"。
+- **失败诊断**（v0.6.0）：`/crew:result` 和 `/crew:progress` 能识别 agy 认证过期、MCP server 不可达等已知失败模式并给修复提示。
 
 **形态参考**：openai/codex-plugin-cc 风格，由薄转发子代理 + 伴侣脚本驱动。
 
-**状态目录**：`~/.crew/`（`jobs/` 放后台任务日志和状态，`worktrees/` 放隔离 worktree）。
+**状态目录**：`~/.crew/`（`jobs/` 放后台任务日志和状态，`worktrees/` 放隔离 worktree，`costs.jsonl` 记录成本台账）。7 天前的已结束任务记录会自动清理。
 
 ## 安装与环境检查
 
@@ -60,7 +64,7 @@ opencode | OK         | ...                   | ...
 
 **重要**：不要让插件自动安装，先手动安装对应 CLI 并确保在 PATH 中。运行 `/crew:setup` 再次确认。
 
-## 全部命令概览（13 个用户命令）
+## 全部命令概览（14 个用户命令）
 
 | 命令 | 作用 | 典型场景 |
 |------|------|----------|
@@ -76,6 +80,7 @@ opencode | OK         | ...                   | ...
 | `/crew:status` | 查看后台任务列表/状态 | 总览 |
 | `/crew:result` | 取后台任务最终结果 | 获取输出 |
 | `/crew:cancel` | 取消运行中的后台任务 | 终止 |
+| `/crew:costs` | 查看成本台账（今天/累计各 CLI 花了多少） | 成本追踪 |
 | `/crew:setup` | 检查环境 | 首次使用/故障排查 |
 
 ## 通用旗标（适用于 omp/grok/agy/opencode）
@@ -87,6 +92,9 @@ opencode | OK         | ...                   | ...
 - `--fresh`：强制开启**新会话**（忽略历史）。
 - `--worktree`：在独立的 git worktree 中执行（避免并行任务互相污染文件系统）。写操作任务推荐加上。
 - `--model <模型名>`：覆盖默认模型（格式因 CLI 而异，例如 `omp` 用 `--model`，`opencode` 用 `-m`）。
+- `--cwd <dir>`：把任务派进指定目录（如已有的 worktree），不改变当前终端的 pwd。
+
+**多行任务传递**（v0.6.0）：companion 内部通过 `--task-stdin` + heredoc 传递多行任务，不再被 shell 换行截断。这是 companion 传任务的标准方式，确保任务内容完整无损。
 
 **自动行为**（不指定 resume/fresh 时）：
 - 同一仓库对该 CLI 有历史会话 → 插件会用 `AskUserQuestion` 问一次：“继续上次会话”还是“开新会话”。
@@ -190,7 +198,8 @@ opencode | OK         | ...                   | ...
 - `--impl` 默认 `omp`
 - `--review` 默认 `grok`（必须与 impl 不同，否则警告但继续）
 - `--rounds` 默认 1
-- **仅支持** `--impl`、`--review`、`--rounds` 三个参数（`pipeline.md` 不解析 `--worktree` 等委派旗标）。实现阶段在**当前工作目录**改文件；需要隔离时请先用 `/crew:omp --worktree` 等单独实现，或改用 `/crew:race --write`（自动 worktree）。
+- `--worktree`：整条流水线跑在同一隔离 worktree 中
+- 实现阶段默认在**当前工作目录**改文件；需要隔离时加上 `--worktree` 旗标。
 
 ```bash
 # 默认流水线（omp 实现 → grok 审查，最多 1 轮修复）
@@ -277,7 +286,25 @@ opencode | OK         | ...                   | ...
 /crew:cancel c-a1b2c3
 ```
 
-### 13. /crew:setup
+### 13. /crew:costs
+查看成本台账：今天和累计各 CLI 花了多少（基于 costs.jsonl）。
+
+```bash
+/crew:costs
+```
+
+输出示例：
+```
+CLI      | 今天       | 累计
+omp      | $3.42      | $127.85
+grok     | $1.20      | $45.30
+agy      | $0.00      | $12.00
+opencode | $0.85      | $23.50
+```
+
+数据来源为 `~/.crew/costs.jsonl`，每次任务结束自动追加。
+
+### 14. /crew:setup
 见“环境检查”一节。
 
 ## 后台任务完整生命周期（推荐流程）
@@ -307,6 +334,7 @@ opencode | OK         | ...                   | ...
 **提示**：
 - 想让 Claude Code 自动轮询：可以让它多次调用 progress，直到状态不是 running。
 - 所有后台任务状态持久化在 `~/.crew/jobs/*.json`。
+- 后台任务完成后会弹出 **macOS 桌面通知**（v0.5.0+）。
 
 ## 5 个 Subagent 类型的编排用法
 
@@ -371,13 +399,17 @@ opencode | OK         | ...                   | ...
 1. **agy 的 -p（headless/print）模式 token 过期**
    - agy 在非交互 `-p` 模式下，认证 token 有时会过期。
    - **解决**：手动在终端运行一次交互式 `agy`（或 `agy login` / 相应刷新命令），完成浏览器/终端登录后，headless 模式才能继续使用。
+   - **v0.6.0 改进**：`/crew:result` 和 `/crew:progress` 能自动识别 agy 认证过期并给出修复提示。
    - crew 不会自动处理 agy 认证。
 
 2. **agy 不支持事件流（progress 解析有限）**
-   - 后台 agy 任务的 `/crew:progress` 只能显示最后几行原始输出，没有结构化“思考/工具/成本”。
+   - 后台 agy 任务的 `/crew:progress` 只能显示最后几行原始输出，没有结构化"思考/工具/成本"。
    - 其他 CLI（omp/grok/opencode）支持 JSON streaming，progress 更丰富。
 
-3. **worktree 清理**
+3. **MCP server 不可达**
+   - **v0.6.0 改进**：`/crew:result` 和 `/crew:progress` 能识别 MCP server 不可达等已知失败模式并给修复提示。
+
+4. **worktree 清理**
    - 用完隔离 worktree 后需手动清理：
      ```bash
      git worktree list
@@ -385,23 +417,23 @@ opencode | OK         | ...                   | ...
      ```
    - 插件不会自动删除。
 
-4. **长时间任务超时**
+5. **长时间任务超时**
    - 前台任务 companion 设置 10 分钟 timeout（600000ms）。
    - 预计更长 → 必须加 `--background`。
 
-5. **resume 行为差异**
+6. **resume 行为差异**
    - omp / opencode / grok：有 `sessionId` 时用 `-r` / `-s` 精确续跑（最可靠）；grok 无 `sessionId` 时退化为 `-c`。
    - agy：resume 固定 `--continue`，依赖该任务目录下的最近会话，不如精确 `sessionId` 稳定。
 
-6. **权限与危险操作**
+7. **权限与危险操作**
    - agy 默认加 `--dangerously-skip-permissions`（非 review 模式）。
    - grok 用 `--permission-mode acceptEdits`。
    - review 模式永远不会让任何 CLI 改文件。
 
-7. **状态文件损坏**
+8. **状态文件损坏**
    - 如遇异常，可手动清理 `~/.crew/jobs/` 下的旧 json（谨慎）。
 
-8. **CLI 版本兼容**
+9. **CLI 版本兼容**
    - 各 CLI 的无头参数（`-p`、`-r`、`-c`、JSON 格式）可能随版本变化。遇到问题先 `/crew:setup` 确认版本，并更新对应 CLI。
 
 ## 最佳实践建议
@@ -417,7 +449,11 @@ opencode | OK         | ...                   | ...
 ---
 
 **反馈与贡献**  
-本指南基于 `plugins/crew/` 下所有命令、agent 定义和 `crew-companion.mjs` 的源码注释与参数解析逻辑编写（v0.4.0）。
+本指南基于 `plugins/crew/` 下所有命令、agent 定义和 `crew-companion.mjs` 的源码注释与参数解析逻辑编写（v0.6.0）。
+
+**版本演进摘要**：
+- **v0.5.0**：前台任务 id 追踪 + `/crew:send` 打通；`--resume` 自动精确会话 id；`--cwd` 旗标；`/crew:pipeline --worktree`；macOS 桌面通知；7 天自动清理；costs.jsonl 成本台账。
+- **v0.6.0**（robustness）：`--task-stdin` + heredoc 防截断；假成功识别（stopReason=Cancelled → failed）；委派无产出标注"结果存疑"；agy/MCP 失败模式诊断。
 
 直接在 Claude Code 里尝试第一个命令：
 ```bash

@@ -106,9 +106,11 @@ function buildArgv(cli, { review, resume, sessionId, model, task, stream }) {
         t
       ];
     case "grok":
+      // delegate 必须 bypassPermissions：acceptEdits 只自动批文件编辑，终端命令会等审批，
+      // 无头模式下约 60s 超时导致整个回合被 Cancelled（退出码仍为 0）
       return [
         "grok", "-p", t,
-        "--permission-mode", review ? "plan" : "acceptEdits",
+        "--permission-mode", review ? "plan" : "bypassPermissions",
         ...(stream ? ["--output-format", "streaming-json"] : []),
         ...(resume ? (sessionId ? ["-r", sessionId] : ["-c"]) : []),
         ...(model ? ["--model", model] : [])
@@ -204,7 +206,10 @@ function diagnose(logText) {
     hints.push("agy 会话过期：在终端交互式跑一次 agy 完成登录即可恢复");
   }
   if (/ConnectionRefused.*mcp|Transport channel closed/i.test(logText)) {
-    hints.push("有 MCP server 连不上（grok 会继承 ~/.claude.json 的 mcpServers，如 xiaohongshu-mcp@18060）。该错误多数情况不影响任务，但偶发导致回合被取消；重试一次，或先启动对应 MCP 服务");
+    hints.push("有 MCP server 连不上（grok 会继承 ~/.claude.json 的 mcpServers）。此错误本身不影响任务，可清理对应 MCP 配置消除噪音");
+  }
+  if (/run_terminal_command/i.test(logText) && /"stopReason":"Cancelled"/.test(logText)) {
+    hints.push("grok 回合在等待终端命令审批时超时被取消：确认 companion 是新版（delegate 用 bypassPermissions）；review 模式（plan）本就禁止执行命令，属预期");
   }
   return hints;
 }

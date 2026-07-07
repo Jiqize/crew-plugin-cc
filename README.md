@@ -7,9 +7,18 @@
 ## 安装
 
 ```bash
-claude plugin marketplace add ~/Desktop/git/crew
+claude plugin marketplace add Jiqize/crew-plugin-cc
 claude plugin install crew@crew
 ```
+
+本地开发安装：
+
+```bash
+claude plugin marketplace add /path/to/crew-plugin-cc
+claude plugin install crew@crew
+```
+
+前置要求：需要已安装并登录相应的 CLI（omp / grok / agy / opencode，装哪个用哪个），安装后可用 `/crew:setup` 体检。
 
 ## 命令
 

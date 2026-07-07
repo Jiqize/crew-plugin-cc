@@ -1,1035 +1,658 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>crew v0.4.0 使用指南</title>
-  <meta name="description" content="crew v0.4.0 插件的中文使用说明。包含安装配置、全部命令概览、各命令详细用法、后台任务生命周期、Subagent类型的编排用法以及常见问题解答。">
-  <style>
-    
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>crew v0.6.0 使用指南</title>
+<style>
+/* ===== 基础重置 ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ===== 变量 ===== */
 :root {
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-mono: ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  
-  --bg-primary: #f8fafc;
-  --bg-sidebar: #ffffff;
-  --bg-card: #ffffff;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
-  --border-color: #e2e8f0;
-  
-  --accent-color: #2563eb;
-  --accent-light: #eff6ff;
-  --accent-hover: #1d4ed8;
-  
-  --pre-bg: #1e293b;
-  --pre-text: #f8fafc;
-  
-  --token-comment: #64748b;
-  --token-punctuation: #94a3b8;
-  --token-property: #38bdf8;
-  --token-selector: #fbbf24;
-  --token-operator: #a5f3fc;
-  --token-keyword: #f472b6;
-  --token-function: #60a5fa;
-  --token-string: #4ade80;
-  --token-number: #fb923c;
-  
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  
-  --sidebar-width: 280px;
+  --bg: #fafbfc;
+  --card: #ffffff;
+  --text: #24292e;
+  --text-muted: #57606a;
+  --border: #d0d7de;
+  --border-light: #e8ecf0;
+  --primary: #0969da;
+  --primary-bg: #ddf4ff;
+  --code-bg: #f6f8fa;
+  --code-border: #e1e4e8;
+  --table-stripe: #f6f8fa;
+  --blockquote-bg: #f0f6fc;
+  --blockquote-border: #0969da;
+  --note-bg: #fff8c5;
+  --note-border: #d4a72c;
+  --toc-bg: #ffffff;
+  --heading: #1f2328;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 
-/* 系统深色模式优先，但可以通过 .light-theme 覆盖 */
-@media (prefers-color-scheme: dark) {
-  :root:not(.light-theme) {
-    --bg-primary: #0f172a;
-    --bg-sidebar: #1e293b;
-    --bg-card: #1e293b;
-    --text-primary: #f8fafc;
-    --text-secondary: #cbd5e1;
-    --text-muted: #94a3b8;
-    --border-color: #334155;
-    
-    --accent-color: #3b82f6;
-    --accent-light: #1e3a8a;
-    --accent-hover: #60a5fa;
-    
-    --pre-bg: #0b0f19;
-    --pre-text: #e2e8f0;
-  }
-}
-
-/* 明确指定深色模式 */
-:root.dark-theme {
-  --bg-primary: #0f172a;
-  --bg-sidebar: #1e293b;
-  --bg-card: #1e293b;
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --border-color: #334155;
-  
-  --accent-color: #3b82f6;
-  --accent-light: #1e3a8a;
-  --accent-hover: #60a5fa;
-  
-  --pre-bg: #0b0f19;
-  --pre-text: #e2e8f0;
-}
-
-* {
-  box-sizing: border-box;
-  margin: 0;
+/* ===== 全局排版 ===== */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--text);
+  background: var(--bg);
   padding: 0;
 }
 
-html {
-  font-family: var(--font-sans);
-  color: var(--text-primary);
-  background-color: var(--bg-primary);
-  scroll-behavior: smooth;
-  line-height: 1.7;
-  font-size: 16px;
+/* ===== 顶部标题区 ===== */
+.hero {
+  background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+  color: #fff;
+  padding: 48px 40px 40px;
+  text-align: center;
+  border-bottom: 1px solid #30363d;
+}
+.hero .badge {
+  display: inline-block;
+  background: rgba(255,255,255,0.12);
+  color: #7ee787;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 14px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+}
+.hero h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin: 0;
+  color: #f0f6fc;
+}
+.hero .subtitle {
+  margin-top: 8px;
+  font-size: 15px;
+  color: #8b949e;
 }
 
-body {
+/* ===== 主体布局 ===== */
+.layout {
   display: flex;
-  min-height: 100vh;
+  max-width: 1100px;
+  margin: 0 auto;
+  min-height: calc(100vh - 180px);
 }
 
-/* 侧边栏样式 */
-.sidebar {
-  width: var(--sidebar-width);
-  background-color: var(--bg-sidebar);
-  border-right: 1px solid var(--border-color);
-  position: fixed;
+/* ===== TOC 侧栏 ===== */
+.toc {
+  position: sticky;
   top: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  transition: transform 0.3s ease, background-color 0.3s ease, border-color 0.3s ease;
-}
-
-.sidebar-header {
-  padding: 24px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.sidebar-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sidebar-subtitle {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin-top: 4px;
-}
-
-.sidebar-nav {
-  flex: 1;
+  width: 260px;
+  min-width: 260px;
+  height: 100vh;
   overflow-y: auto;
-  padding: 20px 16px;
+  padding: 32px 0 40px 20px;
+  background: var(--toc-bg);
+  border-right: 1px solid var(--border-light);
+  font-size: 14px;
+  line-height: 1.6;
 }
-
-.toc-list {
-  list-style: none;
-}
-
-.toc-item-l2, .toc-item-l3 {
-  margin-bottom: 4px;
-}
-
-.toc-item-l2 a {
-  display: block;
-  padding: 8px 12px;
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 0.92rem;
-  font-weight: 500;
-  border-radius: 6px;
-  transition: all 0.2s ease;
-}
-
-.toc-item-l3 a {
-  display: block;
-  padding: 6px 12px 6px 24px;
-  color: var(--text-muted);
-  text-decoration: none;
-  font-size: 0.85rem;
-  border-radius: 6px;
-  transition: all 0.2s ease;
-  position: relative;
-}
-
-.toc-item-l3 a::before {
-  content: "";
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background-color: var(--text-muted);
-  opacity: 0.5;
-}
-
-.toc-item-l2 a:hover, .toc-item-l3 a:hover {
-  background-color: var(--accent-light);
-  color: var(--accent-color);
-}
-
-.toc-item-l2.active > a {
-  background-color: var(--accent-light);
-  color: var(--accent-color);
-  font-weight: 600;
-}
-
-.toc-item-l3.active > a {
-  color: var(--accent-color);
-  font-weight: 600;
-}
-.toc-item-l3.active > a::before {
-  background-color: var(--accent-color);
-  opacity: 1;
-}
-
-/* 主内容区样式 */
-.main-content {
-  margin-left: var(--sidebar-width);
-  flex: 1;
-  min-width: 0;
-  padding: 48px 80px;
-  display: flex;
-  justify-content: center;
-  transition: margin-left 0.3s ease;
-}
-
-.content-wrapper {
-  width: 100%;
-  max-width: 820px;
-}
-
-/* 文档排版样式 */
-.markdown-body {
-  font-size: 1rem;
-  color: var(--text-secondary);
-}
-
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3,
-.markdown-body h4 {
-  color: var(--text-primary);
-  font-weight: 700;
-  margin-top: 2rem;
-  margin-bottom: 1rem;
-  scroll-margin-top: 80px; /* 跳转锚点偏移量，防止被遮挡 */
-}
-
-.markdown-body h1 {
-  font-size: 2.25rem;
-  border-bottom: 2px solid var(--border-color);
-  padding-bottom: 12px;
-  margin-top: 0;
-}
-
-.markdown-body h2 {
-  font-size: 1.6rem;
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: 8px;
-}
-
-.markdown-body h3 {
-  font-size: 1.25rem;
-}
-
-.markdown-body p {
-  margin-bottom: 1.25rem;
-}
-
-.markdown-body strong {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.markdown-body a {
-  color: var(--accent-color);
-  text-decoration: none;
-  border-bottom: 1px dashed var(--accent-color);
-  transition: color 0.2s ease, border-color 0.2s ease;
-}
-
-.markdown-body a:hover {
-  color: var(--accent-hover);
-  border-bottom-style: solid;
-}
-
-.markdown-body ul,
-.markdown-body ol {
-  margin-bottom: 1.25rem;
-  padding-left: 24px;
-}
-
-.markdown-body li {
-  margin-bottom: 0.5rem;
-}
-
-.markdown-body blockquote {
-  padding: 16px 20px;
-  background-color: var(--bg-primary);
-  border-left: 4px solid var(--accent-color);
-  color: var(--text-secondary);
-  border-radius: 0 8px 8px 0;
-  margin: 1.5rem 0;
-  font-style: normal;
-  box-shadow: var(--shadow-sm);
-}
-
-.markdown-body blockquote p:last-child {
-  margin-bottom: 0;
-}
-
-/* 表格样式 */
-.markdown-body table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 1.5rem 0;
-  font-size: 0.92rem;
-  box-shadow: var(--shadow-sm);
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-}
-
-.markdown-body th,
-.markdown-body td {
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.markdown-body th {
-  background-color: var(--accent-light);
-  color: var(--text-primary);
-  font-weight: 600;
-  border-bottom: 2px solid var(--border-color);
-}
-
-.markdown-body tr:last-child td {
-  border-bottom: none;
-}
-
-.markdown-body tr:nth-child(even) td {
-  background-color: rgba(0, 0, 0, 0.015);
-}
-
-/* 行内代码样式 */
-.markdown-body :not(pre) > code {
-  font-family: var(--font-mono);
-  background-color: var(--bg-primary);
-  color: var(--accent-color);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.9em;
-  border: 1px solid var(--border-color);
-}
-
-/* 代码块外壳样式 */
-.code-block-wrapper {
-  margin: 1.5rem 0;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-color);
-  background-color: var(--pre-bg);
-}
-
-.code-block-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
-  background-color: rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  font-family: var(--font-sans);
-}
-
-.code-block-lang {
-  font-size: 0.8rem;
+.toc h3 {
+  font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
-  color: var(--text-muted);
+  letter-spacing: 0.8px;
+  color: #57606a;
+  margin-bottom: 16px;
+  padding-left: 4px;
 }
-
-.copy-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: var(--text-muted);
-  padding: 4px 8px;
+.toc a {
+  display: block;
+  color: #57606a;
+  text-decoration: none;
+  padding: 4px 8px 4px 12px;
   border-radius: 4px;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  border-left: 2px solid transparent;
+  transition: all 0.15s;
+}
+.toc a:hover {
+  color: var(--primary);
+  background: #f0f6fc;
+  border-left-color: var(--primary);
+}
+.toc a.h2 { font-weight: 600; color: #24292e; margin-top: 8px; }
+.toc a.h2:first-of-type { margin-top: 0; }
+
+/* ===== 主内容区 ===== */
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: 40px 48px 80px;
+  background: var(--card);
+  margin: 24px 24px 24px 0;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
 }
 
-.copy-button:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
-.copy-button.copied {
-  background-color: #22c55e;
-  color: #ffffff;
-  border-color: #22c55e;
-}
-
-.copy-button svg {
-  flex-shrink: 0;
-}
-
-/* 代码高亮 Prism */
-pre {
-  background: var(--pre-bg) !important;
-  color: var(--pre-text) !important;
-  padding: 16px;
-  overflow-x: auto;
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  line-height: 1.5;
-  margin: 0;
-}
-
-code[class*="language-"],
-pre[class*="language-"] {
-  color: var(--pre-text);
-  font-family: var(--font-mono);
-  text-align: left;
-  white-space: pre;
-  word-spacing: normal;
-  word-break: normal;
-  word-wrap: normal;
-  line-height: 1.5;
-  tab-size: 4;
-  hyphens: none;
-}
-
-/* Token 样式映射 */
-.token.comment,
-.token.prolog,
-.token.doctype,
-.token.cdata {
-  color: var(--token-comment);
-  font-style: italic;
-}
-.token.punctuation {
-  color: var(--token-punctuation);
-}
-.token.property,
-.token.tag,
-.token.boolean,
-.token.number,
-.token.constant,
-.token.symbol,
-.token.deleted {
-  color: var(--token-property);
-}
-.token.number {
-  color: var(--token-number);
-}
-.token.selector,
-.token.attr-name,
-.token.string,
-.token.char,
-.token.builtin,
-.token.inserted {
-  color: var(--token-string);
-}
-.token.operator,
-.token.entity,
-.token.url,
-.token.variable {
-  color: var(--token-operator);
-}
-.token.atrule,
-.token.attr-value,
-.token.keyword {
-  color: var(--token-keyword);
-  font-weight: 600;
-}
-.token.function,
-.token.class-name {
-  color: var(--token-function);
-}
-.token.regex,
-.token.important {
-  color: var(--token-selector);
-}
-
-/* 主题与菜单控制浮动按钮 */
-.floating-actions {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  z-index: 1000;
-}
-
-.floating-btn {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background-color: var(--bg-sidebar);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-lg);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.floating-btn:hover {
-  transform: translateY(-2px);
-  background-color: var(--accent-light);
-  color: var(--accent-color);
-  border-color: var(--accent-color);
-}
-
-.theme-toggle svg {
-  width: 20px;
-  height: 20px;
-}
-
-.menu-toggle {
-  display: none;
-}
-
-/* 顶部移动端导航栏 */
-.mobile-navbar {
-  display: none;
-  height: 56px;
-  background-color: var(--bg-sidebar);
-  border-bottom: 1px solid var(--border-color);
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 99;
-  padding: 0 16px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.mobile-title {
-  font-size: 1.1rem;
+/* ===== 标题层级 ===== */
+.content h2 {
+  font-size: 26px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--heading);
+  margin: 44px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+  letter-spacing: -0.3px;
+}
+.content h2:first-child { margin-top: 0; }
+.content h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--heading);
+  margin: 32px 0 12px;
+}
+.content h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--heading);
+  margin: 24px 0 10px;
 }
 
-/* 侧边栏遮罩 */
-.sidebar-overlay {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  z-index: 98;
+/* ===== 段落与链接 ===== */
+.content p {
+  margin: 0 0 14px;
+  color: var(--text);
+}
+.content a {
+  color: var(--primary);
+  text-decoration: none;
+}
+.content a:hover { text-decoration: underline; }
+.content strong { font-weight: 600; color: #1f2328; }
+
+/* ===== 章节锚点 ===== */
+.anchor {
+  display: inline-block;
+  opacity: 0;
+  margin-left: 8px;
+  color: #8b949e;
+  font-size: 18px;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+h2:hover .anchor, h3:hover .anchor, h4:hover .anchor { opacity: 1; }
+.anchor:hover { color: var(--primary); }
+
+/* ===== 引用块 ===== */
+.content blockquote {
+  border-left: 4px solid var(--blockquote-border);
+  background: var(--blockquote-bg);
+  margin: 0 0 16px;
+  padding: 14px 20px;
+  border-radius: 0 6px 6px 0;
+  color: #1f2328;
+  font-size: 15px;
+}
+.content blockquote p { margin: 0 0 6px; }
+.content blockquote p:last-child { margin-bottom: 0; }
+.content blockquote strong { color: #0550ae; }
+
+/* ===== 代码（行内） ===== */
+.content code {
+  font-family: "SF Mono", "Fira Code", "Fira Mono", "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
+  font-size: 13.5px;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  color: #24292e;
 }
 
-/* 响应式调整 */
-@media (max-width: 1024px) {
-  .sidebar {
-    transform: translateX(-100%);
-    box-shadow: var(--shadow-lg);
-  }
-  
-  .sidebar.open {
-    transform: translateX(0);
-  }
-  
-  .sidebar-overlay.show {
-    display: block;
-  }
-  
-  .main-content {
-    margin-left: 0;
-    padding: 88px 24px 48px 24px;
-  }
-  
-  .mobile-navbar {
-    display: flex;
-  }
-  
-  .menu-toggle {
-    display: flex;
-  }
+/* ===== 代码块 ===== */
+.content pre {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 6px;
+  padding: 18px 20px;
+  margin: 0 0 16px;
+  overflow-x: auto;
+  line-height: 1.55;
+  font-size: 13.5px;
+}
+.content pre code {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  white-space: pre;
+  font-size: inherit;
 }
 
-  </style>
+/* ===== 表格 ===== */
+.content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 16px;
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+.content thead th {
+  background: var(--code-bg);
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  color: var(--heading);
+  font-size: 14px;
+}
+.content tbody td {
+  padding: 9px 14px;
+  border: 1px solid var(--border-light);
+}
+.content tbody tr:nth-child(odd) { background: #fff; }
+.content tbody tr:nth-child(even) { background: var(--table-stripe); }
+.content tbody tr:hover { background: #e8f2fc; }
+
+/* ===== 列表 ===== */
+.content ul, .content ol {
+  margin: 0 0 14px;
+  padding-left: 28px;
+}
+.content li { margin-bottom: 4px; }
+.content li > ul, .content li > ol { margin: 4px 0; }
+.content li p { margin: 0; }
+
+/* ===== 水平线 ===== */
+.content hr {
+  border: none;
+  border-top: 1px solid var(--border-light);
+  margin: 36px 0;
+}
+
+/* ===== 提示框 ===== */
+.tip-box {
+  background: #f0f6fc;
+  border-left: 4px solid #0969da;
+  border-radius: 0 6px 6px 0;
+  padding: 14px 20px;
+  margin: 0 0 16px;
+  font-size: 15px;
+}
+.tip-box strong:first-child {
+  display: block;
+  margin-bottom: 2px;
+  color: #0550ae;
+}
+.tip-box ul { margin-bottom: 0; }
+.tip-box li:last-child { margin-bottom: 0; }
+
+.warn-box {
+  background: #fff8c5;
+  border-left: 4px solid #d4a72c;
+  border-radius: 0 6px 6px 0;
+  padding: 14px 20px;
+  margin: 0 0 16px;
+  font-size: 15px;
+}
+.warn-box strong:first-child {
+  display: block;
+  margin-bottom: 2px;
+  color: #9a6700;
+}
+.warn-box p { margin-top: 6px; }
+
+/* ===== 页脚 ===== */
+.footer {
+  text-align: center;
+  color: #8b949e;
+  font-size: 13px;
+  padding: 28px 40px 32px;
+  background: #fff;
+  border-top: 1px solid var(--border-light);
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 900px) {
+  .layout { flex-direction: column; }
+  .toc {
+    position: static;
+    width: 100%;
+    min-width: auto;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-light);
+    padding: 20px 24px 16px;
+    max-height: 280px;
+  }
+  .content { margin: 16px; padding: 24px 20px 40px; }
+  .hero { padding: 32px 20px; }
+  .hero h1 { font-size: 24px; }
+}
+
+/* ===== 滚动条美化 ===== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c1c8cd; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a8afb5; }
+</style>
 </head>
 <body>
 
-  <!-- 移动端顶部导航栏 -->
-  <div class="mobile-navbar">
-    <div class="mobile-title">crew v0.4.0 使用指南</div>
-  </div>
+<!-- ===== 顶部标题区 ===== -->
+<div class="hero">
+  <div><span class="badge">v0.6.0</span></div>
+  <h1>crew 使用指南</h1>
+  <p class="subtitle">面向首次使用 crew 插件的 Claude Code 用户</p>
+</div>
 
-  <!-- 侧边栏遮罩 -->
-  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+<div class="layout">
 
-  <!-- 侧边栏目录 -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <div class="sidebar-title">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-color);">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-          <circle cx="9" cy="7" r="4"></circle>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-        </svg>
-        <span>crew v0.4.0</span>
-      </div>
-      <div class="sidebar-subtitle">Claude Code 委派插件</div>
-    </div>
-    <nav class="sidebar-nav">
-      <ul class="toc-list"><li class="toc-item-l2"><a href="#插件是什么-解决什么问题">插件是什么？解决什么问题？</a></li><li class="toc-item-l3"><a href="#核心价值">核心价值</a></li><li class="toc-item-l2"><a href="#安装与环境检查">安装与环境检查</a></li><li class="toc-item-l3"><a href="#安装插件">安装插件</a></li><li class="toc-item-l3"><a href="#环境检查-必须先做">环境检查（必须先做）</a></li><li class="toc-item-l2"><a href="#全部命令概览-13-个用户命令">全部命令概览（13 个用户命令）</a></li><li class="toc-item-l2"><a href="#通用旗标-适用于-omp-grok-agy-opencode">通用旗标（适用于 omp/grok/agy/opencode）</a></li><li class="toc-item-l2"><a href="#各命令详细用法-可复制示例">各命令详细用法 + 可复制示例</a></li><li class="toc-item-l3"><a href="#1-crew-omp-lt-任务-gt">1. /crew:omp &lt;任务&gt;</a></li><li class="toc-item-l3"><a href="#2-crew-grok-lt-任务-gt">2. /crew:grok &lt;任务&gt;</a></li><li class="toc-item-l3"><a href="#3-crew-agy-lt-任务-gt">3. /crew:agy &lt;任务&gt;</a></li><li class="toc-item-l3"><a href="#4-crew-opencode-lt-任务-gt">4. /crew:opencode &lt;任务&gt;</a></li><li class="toc-item-l3"><a href="#5-crew-review-by-base-关注点">5. /crew:review --by  [--base ] [关注点]</a></li><li class="toc-item-l3"><a href="#6-crew-race-by-omp-grok-agy-opencode-write-lt-任务-gt">6. /crew:race [--by omp,grok,agy,opencode] [--write] &lt;任务&gt;</a></li><li class="toc-item-l3"><a href="#7-crew-pipeline-impl-review-rounds-n-lt-任务-gt">7. /crew:pipeline [--impl ] [--review ] [--rounds N] &lt;任务&gt;</a></li><li class="toc-item-l3"><a href="#8-crew-send-task-id-background">8. /crew:send [task-id] [--background] -- &lt;follow-up&gt;</a></li><li class="toc-item-l3"><a href="#9-crew-progress-task-id">9. /crew:progress [task-id]</a></li><li class="toc-item-l3"><a href="#10-crew-status-task-id">10. /crew:status [task-id]</a></li><li class="toc-item-l3"><a href="#11-crew-result-task-id">11. /crew:result [task-id]</a></li><li class="toc-item-l3"><a href="#12-crew-cancel-task-id">12. /crew:cancel [task-id]</a></li><li class="toc-item-l3"><a href="#13-crew-setup">13. /crew:setup</a></li><li class="toc-item-l2"><a href="#后台任务完整生命周期-推荐流程">后台任务完整生命周期（推荐流程）</a></li><li class="toc-item-l2"><a href="#5-个-subagent-类型的编排用法">5 个 Subagent 类型的编排用法</a></li><li class="toc-item-l3"><a href="#直接在-agent-工具中使用-示例">直接在 Agent 工具中使用（示例）</a></li><li class="toc-item-l3"><a href="#典型编排模式">典型编排模式</a></li><li class="toc-item-l2"><a href="#已知问题-amp-注意事项">已知问题 &amp; 注意事项</a></li><li class="toc-item-l2"><a href="#最佳实践建议">最佳实践建议</a></li></ul>
-    </nav>
-  </aside>
+<!-- ===== TOC 导航 ===== -->
+<nav class="toc">
+  <h3>目录</h3>
+  <a class="h2" href="#s1">插件是什么？</a>
+  <a class="h2" href="#s2">安装与环境检查</a>
+  <a class="h2" href="#s3">全部命令概览</a>
+  <a class="h2" href="#s4">通用旗标</a>
+  <a class="h2" href="#s5">各命令详细用法</a>
+  <a href="#s5-1">1. /crew:omp</a>
+  <a href="#s5-2">2. /crew:grok</a>
+  <a href="#s5-3">3. /crew:agy</a>
+  <a href="#s5-4">4. /crew:opencode</a>
+  <a href="#s5-5">5. /crew:review</a>
+  <a href="#s5-6">6. /crew:race</a>
+  <a href="#s5-7">7. /crew:pipeline</a>
+  <a href="#s5-8">8. /crew:send</a>
+  <a href="#s5-9">9. /crew:progress</a>
+  <a href="#s5-10">10. /crew:status</a>
+  <a href="#s5-11">11. /crew:result</a>
+  <a href="#s5-12">12. /crew:cancel</a>
+  <a href="#s5-13">13. /crew:costs</a>
+  <a href="#s5-14">14. /crew:setup</a>
+  <a class="h2" href="#s6">后台任务生命周期</a>
+  <a class="h2" href="#s7">Subagent 编排用法</a>
+  <a class="h2" href="#s8">已知问题 &amp; 注意事项</a>
+  <a class="h2" href="#s9">最佳实践建议</a>
+</nav>
 
-  <!-- 主内容区 -->
-  <main class="main-content">
-    <article class="content-wrapper markdown-body">
-      <h1 id="crew-v0-4-0-使用指南">crew v0.4.0 使用指南</h1>
-<blockquote>
-<p><strong>面向首次使用 crew 插件的 Claude Code 用户</strong><br>本指南包含可直接复制运行的命令示例。所有示例假设你已在 Claude Code 会话中，且当前目录是一个 git 仓库（推荐）。</p>
-</blockquote>
-<h2 id="插件是什么-解决什么问题">插件是什么？解决什么问题？</h2>
-<p><code>crew</code> 是一个 Claude Code 插件（版本 0.4.0），用于<strong>把任务委派（delegate）给外部 agent CLI</strong>：</p>
+<!-- ===== 正文内容 ===== -->
+<main class="content">
+
+<h2 id="s1">插件是什么？解决什么问题？<a class="anchor" href="#s1">#</a></h2>
+
+<p><code>crew</code> 是一个 Claude Code 插件（版本 0.6.0），用于<strong>把任务委派（delegate）给外部 agent CLI</strong>：</p>
+
 <ul>
-<li><strong>omp</strong> (oh-my-pi)</li>
-<li><strong>grok</strong> (grok.com/build CLI)</li>
-<li><strong>agy</strong> (Google Antigravity / antigravity CLI)</li>
-<li><strong>opencode</strong> (opencode.ai)</li>
+  <li><strong>omp</strong> (oh-my-pi)</li>
+  <li><strong>grok</strong> (grok.com/build CLI)</li>
+  <li><strong>agy</strong> (Google Antigravity / antigravity CLI)</li>
+  <li><strong>opencode</strong> (opencode.ai)</li>
 </ul>
-<h3 id="核心价值">核心价值</h3>
+
+<h3 id="s1-1">核心价值<a class="anchor" href="#s1-1">#</a></h3>
+
 <ul>
-<li><strong>在 Claude Code 里直接调用其他 CLI 的能力</strong>，无需切换终端或复制粘贴上下文。</li>
-<li><strong>确定性运行时</strong>（<code>crew-companion.mjs</code>）：统一拼装各 CLI 的无头参数（<code>-p</code> / <code>--print</code> / <code>run</code> 等），处理后台任务、会话续跑、git worktree 隔离。</li>
-<li><strong>后台长任务管理</strong>：适合耗时编码、分析、审查任务，不阻塞当前会话。</li>
-<li><strong>并行与流水线编排</strong>：race 多 CLI 对比、pipeline（实现→审查→修复循环）。</li>
-<li><strong>只读审查</strong> + <strong>写操作隔离</strong>：review 永远不改文件；--worktree 让并行写操作互不干扰。</li>
-<li><strong>会话连续性</strong>：自动记录上次会话，支持 <code>--resume</code> 续跑（omp / opencode / grok 在捕获到 <code>sessionId</code> 时用 <code>-r</code> 精确续跑；无 <code>sessionId</code> 时 grok 退化为 <code>-c</code>；agy 固定 <code>--continue</code>）。</li>
-<li><strong>原样返回输出</strong>：子代理只做转发，不总结、不改写结果。</li>
+  <li><strong>在 Claude Code 里直接调用其他 CLI 的能力</strong>，无需切换终端或复制粘贴上下文。</li>
+  <li><strong>确定性运行时</strong>（<code>crew-companion.mjs</code>）：统一拼装各 CLI 的无头参数（<code>-p</code> / <code>--print</code> / <code>run</code> 等），处理后台任务、会话续跑、git worktree 隔离。</li>
+  <li><strong>后台长任务管理</strong>：适合耗时编码、分析、审查任务，不阻塞当前会话。</li>
+  <li><strong>并行与流水线编排</strong>：race 多 CLI 对比、pipeline（实现→审查→修复循环）。</li>
+  <li><strong>只读审查</strong> + <strong>写操作隔离</strong>：review 永远不改文件；&#8208;&#8208;worktree 让并行写操作互不干扰。</li>
+  <li><strong>会话连续性</strong>：<code>--resume</code> 自动使用状态里记录的精确会话 id 续跑（omp / opencode / grok 用 <code>-r</code> / <code>-s</code> 精确续跑；无 <code>sessionId</code> 时 grok 退化为 <code>-c</code>；agy 固定 <code>--continue</code>）。</li>
+  <li><strong>原样返回输出</strong>：子代理只做转发，不总结、不改写结果。</li>
+  <li><strong>全量任务追踪</strong>：前台运行也会创建有 id 的任务记录，任何一次运行（前台/后台）都可用 <code>/crew:send</code> 追问。告别 v0.4 中"只有后台任务有 id"的摩擦点。</li>
+  <li><strong>假成功识别</strong>（v0.6.0）：退出码 0 但回合被取消（如 grok <code>stopReason=Cancelled</code>）会自动标记为 failed 并说明原因。</li>
+  <li><strong>委派结果存疑标注</strong>：委派任务无最终产出时会标注"结果存疑"。</li>
+  <li><strong>失败诊断</strong>（v0.6.0）：<code>/crew:result</code> 和 <code>/crew:progress</code> 能识别 agy 认证过期、MCP server 不可达等已知失败模式并给修复提示。</li>
 </ul>
+
 <p><strong>形态参考</strong>：openai/codex-plugin-cc 风格，由薄转发子代理 + 伴侣脚本驱动。</p>
-<p><strong>状态目录</strong>：<code>~/.crew/</code>（<code>jobs/</code> 放后台任务日志和状态，<code>worktrees/</code> 放隔离 worktree）。</p>
-<h2 id="安装与环境检查">安装与环境检查</h2>
-<h3 id="安装插件">安装插件</h3>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash"># 添加本地 marketplace（假设 crew 仓库在 ~/Desktop/git/crew）
+<p><strong>状态目录</strong>：<code>~/.crew/</code>（<code>jobs/</code> 放后台任务日志和状态，<code>worktrees/</code> 放隔离 worktree，<code>costs.jsonl</code> 记录成本台账）。7 天前的已结束任务记录会自动清理。</p>
+
+
+
+<h2 id="s2">安装与环境检查<a class="anchor" href="#s2">#</a></h2>
+
+<h3 id="s2-1">安装插件<a class="anchor" href="#s2-1">#</a></h3>
+
+<pre><code># 添加本地 marketplace（假设 crew 仓库在 ~/Desktop/git/crew）
 claude plugin marketplace add ~/Desktop/git/crew
 
 # 安装 crew 插件
 claude plugin install crew@crew</code></pre>
-</div>
-<p>安装后会注册斜杠命令（<code>/crew:*</code>）和 5 个具名 subagent 类型。</p>
-<h3 id="环境检查-必须先做">环境检查（必须先做）</h3>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash">/crew:setup</code></pre>
-</div>
+<p>安装后会注册斜杠命令（<code>/crew:*</code>）和 5 个具名 subagent 类型。</p>
+
+<h3 id="s2-2">环境检查（必须先做）<a class="anchor" href="#s2-2">#</a></h3>
+
+<pre><code>/crew:setup</code></pre>
+
 <p><strong>示例输出</strong>（表格形式）：</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">text</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-none"><code class="language-none">CLI      | installed? | path                  | version
+<pre><code>CLI      | installed? | path                  | version
 omp      | OK         | /usr/local/bin/omp    | omp vX.Y.Z
 grok     | OK         | /usr/local/bin/grok   | ...
 agy      | MISSING    |                       |
 opencode | OK         | ...                   | ...</code></pre>
-</div>
+
 <p><strong>缺失 CLI 的安装提示</strong>（setup 会告诉你来源）：</p>
+
 <ul>
-<li><code>omp</code>：oh-my-pi（npm 包）</li>
-<li><code>grok</code>：grok.com/build CLI</li>
-<li><code>agy</code>：Google Antigravity CLI</li>
-<li><code>opencode</code>：opencode.ai</li>
+  <li><code>omp</code>：oh-my-pi（npm 包）</li>
+  <li><code>grok</code>：grok.com/build CLI</li>
+  <li><code>agy</code>：Google Antigravity CLI</li>
+  <li><code>opencode</code>：opencode.ai</li>
 </ul>
-<p><strong>重要</strong>：不要让插件自动安装，先手动安装对应 CLI 并确保在 PATH 中。运行 <code>/crew:setup</code> 再次确认。</p>
-<h2 id="全部命令概览-13-个用户命令">全部命令概览（13 个用户命令）</h2>
+
+<div class="warn-box">
+  <strong>重要</strong>
+  <p>不要让插件自动安装，先手动安装对应 CLI 并确保在 PATH 中。运行 <code>/crew:setup</code> 再次确认。</p>
+</div>
+
+
+
+<h2 id="s3">全部命令概览（14 个用户命令）<a class="anchor" href="#s3">#</a></h2>
+
 <table>
-<thead>
-<tr>
-<th>命令</th>
-<th>作用</th>
-<th>典型场景</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>/crew:omp</code></td>
-<td>委派给 omp</td>
-<td>编码、分析、工具调用</td>
-</tr>
-<tr>
-<td><code>/crew:grok</code></td>
-<td>委派给 grok</td>
-<td>深度思考、研究</td>
-</tr>
-<tr>
-<td><code>/crew:agy</code></td>
-<td>委派给 Antigravity</td>
-<td>长上下文、复杂任务</td>
-</tr>
-<tr>
-<td><code>/crew:opencode</code></td>
-<td>委派给 opencode</td>
-<td>自动模式编码</td>
-</tr>
-<tr>
-<td><code>/crew:review</code></td>
-<td>只读审查当前改动</td>
-<td>代码审查</td>
-</tr>
-<tr>
-<td><code>/crew:race</code></td>
-<td>多 CLI 并行跑同一任务并对比</td>
-<td>选最优方案</td>
-</tr>
-<tr>
-<td><code>/crew:pipeline</code></td>
-<td>实现 → 审查 → 修复循环</td>
-<td>质量保证流水线</td>
-</tr>
-<tr>
-<td><code>/crew:send</code></td>
-<td>向已结束任务追问（<code>--</code> 后跟消息）</td>
-<td>迭代、追问细节</td>
-</tr>
-<tr>
-<td><code>/crew:progress</code></td>
-<td>看后台任务实时进度</td>
-<td>监控长任务</td>
-</tr>
-<tr>
-<td><code>/crew:status</code></td>
-<td>查看后台任务列表/状态</td>
-<td>总览</td>
-</tr>
-<tr>
-<td><code>/crew:result</code></td>
-<td>取后台任务最终结果</td>
-<td>获取输出</td>
-</tr>
-<tr>
-<td><code>/crew:cancel</code></td>
-<td>取消运行中的后台任务</td>
-<td>终止</td>
-</tr>
-<tr>
-<td><code>/crew:setup</code></td>
-<td>检查环境</td>
-<td>首次使用/故障排查</td>
-</tr>
-</tbody></table>
-<h2 id="通用旗标-适用于-omp-grok-agy-opencode">通用旗标（适用于 omp/grok/agy/opencode）</h2>
+  <thead>
+    <tr><th>命令</th><th>作用</th><th>典型场景</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>/crew:omp</code></td><td>委派给 omp</td><td>编码、分析、工具调用</td></tr>
+    <tr><td><code>/crew:grok</code></td><td>委派给 grok</td><td>深度思考、研究</td></tr>
+    <tr><td><code>/crew:agy</code></td><td>委派给 Antigravity</td><td>长上下文、复杂任务</td></tr>
+    <tr><td><code>/crew:opencode</code></td><td>委派给 opencode</td><td>自动模式编码</td></tr>
+    <tr><td><code>/crew:review</code></td><td>只读审查当前改动</td><td>代码审查</td></tr>
+    <tr><td><code>/crew:race</code></td><td>多 CLI 并行跑同一任务并对比</td><td>选最优方案</td></tr>
+    <tr><td><code>/crew:pipeline</code></td><td>实现 → 审查 → 修复循环</td><td>质量保证流水线</td></tr>
+    <tr><td><code>/crew:send</code></td><td>向已结束任务追问（<code>--</code> 后跟消息）</td><td>迭代、追问细节</td></tr>
+    <tr><td><code>/crew:progress</code></td><td>看后台任务实时进度</td><td>监控长任务</td></tr>
+    <tr><td><code>/crew:status</code></td><td>查看后台任务列表/状态</td><td>总览</td></tr>
+    <tr><td><code>/crew:result</code></td><td>取后台任务最终结果</td><td>获取输出</td></tr>
+    <tr><td><code>/crew:cancel</code></td><td>取消运行中的后台任务</td><td>终止</td></tr>
+    <tr><td><code>/crew:costs</code></td><td>查看成本台账（今天/累计各 CLI 花了多少）</td><td>成本追踪</td></tr>
+    <tr><td><code>/crew:setup</code></td><td>检查环境</td><td>首次使用/故障排查</td></tr>
+  </tbody>
+</table>
+
+
+
+<h2 id="s4">通用旗标（适用于 omp/grok/agy/opencode）<a class="anchor" href="#s4">#</a></h2>
+
 <p>所有委派命令（omp/grok/agy/opencode）支持这些旗标（<strong>不是任务文本</strong>，会自动被路由）：</p>
+
 <ul>
-<li><code>--background</code>：后台运行。立即返回任务 ID，后续用 progress/result 跟踪。适合 &gt;5-10 分钟的任务。</li>
-<li><code>--resume</code>：继续该 CLI 在当前仓库的<strong>上次会话</strong>。</li>
-<li><code>--fresh</code>：强制开启<strong>新会话</strong>（忽略历史）。</li>
-<li><code>--worktree</code>：在独立的 git worktree 中执行（避免并行任务互相污染文件系统）。写操作任务推荐加上。</li>
-<li><code>--model &lt;模型名&gt;</code>：覆盖默认模型（格式因 CLI 而异，例如 <code>omp</code> 用 <code>--model</code>，<code>opencode</code> 用 <code>-m</code>）。</li>
+  <li><code>--background</code>：后台运行。立即返回任务 ID，后续用 progress/result 跟踪。适合 &gt;5-10 分钟的任务。</li>
+  <li><code>--resume</code>：继续该 CLI 在当前仓库的<strong>上次会话</strong>。</li>
+  <li><code>--fresh</code>：强制开启<strong>新会话</strong>（忽略历史）。</li>
+  <li><code>--worktree</code>：在独立的 git worktree 中执行（避免并行任务互相污染文件系统）。写操作任务推荐加上。</li>
+  <li><code>--model &lt;模型名&gt;</code>：覆盖默认模型（格式因 CLI 而异，例如 <code>omp</code> 用 <code>--model</code>，<code>opencode</code> 用 <code>-m</code>）。</li>
+  <li><code>--cwd &lt;dir&gt;</code>：把任务派进指定目录（如已有的 worktree），不改变当前终端的 pwd。</li>
 </ul>
+
+<p><strong>多行任务传递</strong>（v0.6.0）：companion 内部通过 <code>--task-stdin</code> + heredoc 传递多行任务，不再被 shell 换行截断。这是 companion 传任务的标准方式，确保任务内容完整无损。</p>
+
 <p><strong>自动行为</strong>（不指定 resume/fresh 时）：</p>
+
 <ul>
-<li>同一仓库对该 CLI 有历史会话 → 插件会用 <code>AskUserQuestion</code> 问一次：“继续上次会话”还是“开新会话”。</li>
-<li>明确 follow-up 词（“继续”、“接着”、“keep going”）会推荐 resume。</li>
+  <li>同一仓库对该 CLI 有历史会话 → 插件会用 <code>AskUserQuestion</code> 问一次："继续上次会话"还是"开新会话"。</li>
+  <li>明确 follow-up 词（"继续"、"接着"、"keep going"）会推荐 resume。</li>
 </ul>
+
 <p><strong>示例</strong>（直接复制）：</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash"># 后台 + 隔离 worktree + 指定模型
-/crew:omp --background --worktree --model sonnet &quot;重构 src/utils.ts 中的所有工具函数，添加类型和测试&quot;
+<pre><code># 后台 + 隔离 worktree + 指定模型
+/crew:omp --background --worktree --model sonnet "重构 src/utils.ts 中的所有工具函数，添加类型和测试"
 
 # 续跑上次的 grok 会话
-/crew:grok --resume &quot;继续上次的方案，处理边界条件&quot;
+/crew:grok --resume "继续上次的方案，处理边界条件"
 
 # 新会话 + 后台
-/crew:agy --fresh --background &quot;分析这个大型代码库的架构问题&quot;</code></pre>
-</div>
-<h2 id="各命令详细用法-可复制示例">各命令详细用法 + 可复制示例</h2>
-<h3 id="1-crew-omp-lt-任务-gt">1. /crew:omp &lt;任务&gt;</h3>
+/crew:agy --fresh --background "分析这个大型代码库的架构问题"</code></pre>
+
+
+
+<h2 id="s5">各命令详细用法 + 可复制示例<a class="anchor" href="#s5">#</a></h2>
+
+
+
+<h3 id="s5-1">1. /crew:omp &lt;任务&gt;<a class="anchor" href="#s5-1">#</a></h3>
 <p>委派给 omp（支持完整工具调用、可改代码）。</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash">/crew:omp &quot;实现一个用户认证中间件，支持 JWT 和 session&quot;
+<pre><code>/crew:omp "实现一个用户认证中间件，支持 JWT 和 session"
 
 # 后台 + worktree
-/crew:omp --background --worktree &quot;把所有 console.log 替换成结构化 logger&quot;
+/crew:omp --background --worktree "把所有 console.log 替换成结构化 logger"
 
 # 续跑
-/crew:omp --resume &quot;刚才的实现加一个 rate limit&quot;</code></pre>
-</div>
-<h3 id="2-crew-grok-lt-任务-gt">2. /crew:grok &lt;任务&gt;</h3>
+/crew:omp --resume "刚才的实现加一个 rate limit"</code></pre>
+
+
+
+<h3 id="s5-2">2. /crew:grok &lt;任务&gt;<a class="anchor" href="#s5-2">#</a></h3>
 <p>委派给 grok（<code>acceptEdits</code> 权限，可改代码）。</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash">/crew:grok &quot;解释当前 PR 的改动并给出潜在风险清单&quot;
+<pre><code>/crew:grok "解释当前 PR 的改动并给出潜在风险清单"
 
 # review 模式后台
-/crew:grok --background &quot;审查最近的数据库查询变更&quot;</code></pre>
-</div>
-<h3 id="3-crew-agy-lt-任务-gt">3. /crew:agy &lt;任务&gt;</h3>
+/crew:grok --background "审查最近的数据库查询变更"</code></pre>
+
+
+
+<h3 id="s5-3">3. /crew:agy &lt;任务&gt;<a class="anchor" href="#s5-3">#</a></h3>
 <p>委派给 Antigravity（长上下文强，默认跳过权限确认）。</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash">/crew:agy &quot;对整个项目做安全审计，列出 OWASP Top 10 相关风险&quot;
+<pre><code>/crew:agy "对整个项目做安全审计，列出 OWASP Top 10 相关风险"
 
 # 后台
-/crew:agy --background &quot;生成项目的技术文档大纲&quot;</code></pre>
-</div>
-<h3 id="4-crew-opencode-lt-任务-gt">4. /crew:opencode &lt;任务&gt;</h3>
+/crew:agy --background "生成项目的技术文档大纲"</code></pre>
+
+
+
+<h3 id="s5-4">4. /crew:opencode &lt;任务&gt;<a class="anchor" href="#s5-4">#</a></h3>
 <p>委派给 opencode（<code>--auto</code> 模式）。</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash">/crew:opencode &quot;添加一个新的 API 端点 /health 并写测试&quot;
+<pre><code>/crew:opencode "添加一个新的 API 端点 /health 并写测试"
 
 # 指定 provider/model
-/crew:opencode --model anthropic/claude-3-5-sonnet --background &quot;迁移旧的 class 组件到 hooks&quot;</code></pre>
-</div>
-<h3 id="5-crew-review-by-base-关注点">5. /crew:review --by <cli> [--base <ref>] [关注点]</h3>
+/crew:opencode --model anthropic/claude-3-5-sonnet --background "迁移旧的 class 组件到 hooks"</code></pre>
+
+
+
+<h3 id="s5-5">5. /crew:review &#8208;&#8208;by &lt;cli&gt; [&#8208;&#8208;base &lt;ref&gt;] [关注点]<a class="anchor" href="#s5-5">#</a></h3>
 <p>让指定 CLI <strong>只读</strong>审查当前改动。永远不会修改文件。</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash"># 审查未提交改动（默认）
-/crew:review --by grok &quot;重点关注性能和安全&quot;
+<pre><code># 审查未提交改动（默认）
+/crew:review --by grok "重点关注性能和安全"
 
 # 基于某个 ref 的 diff
-/crew:review --by omp --base main &quot;审查本次 feature 分支的所有变更&quot;
+/crew:review --by omp --base main "审查本次 feature 分支的所有变更"
 
 # 后台审查
-/crew:review --by agy --background &quot;列出所有可能的空指针和边界问题&quot;</code></pre>
-</div>
+/crew:review --by agy --background "列出所有可能的空指针和边界问题"</code></pre>
+
 <p><strong>实现细节</strong>：自动采集 <code>git status + git diff + staged</code>，或 <code>git diff &lt;base&gt;...HEAD</code>。</p>
-<h3 id="6-crew-race-by-omp-grok-agy-opencode-write-lt-任务-gt">6. /crew:race [--by omp,grok,agy,opencode] [--write] &lt;任务&gt;</h3>
+
+
+
+<h3 id="s5-6">6. /crew:race [&#8208;&#8208;by omp,grok,agy,opencode] [&#8208;&#8208;write] &lt;任务&gt;<a class="anchor" href="#s5-6">#</a></h3>
 <p>同一任务在多个 CLI 上<strong>并行</strong>执行，然后对比结果。</p>
+
 <ul>
-<li>无 <code>--write</code>：每个用 review（只读）模式。</li>
-<li>有 <code>--write</code>：每个自动加 <code>--worktree</code> 隔离，互不冲突。</li>
+  <li>无 <code>--write</code>：每个用 review（只读）模式。</li>
+  <li>有 <code>--write</code>：每个自动加 <code>--worktree</code> 隔离，互不冲突。</li>
 </ul>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash"># 分析任务（只读 race）
-/crew:race --by omp,grok &quot;分析当前登录模块的安全性并给出改进建议&quot;
+<pre><code># 分析任务（只读 race）
+/crew:race --by omp,grok "分析当前登录模块的安全性并给出改进建议"
 
 # 写操作 race（自动 worktree）
-/crew:race --write &quot;重写用户偏好存储逻辑，支持本地 + 云端同步&quot;
+/crew:race --write "重写用户偏好存储逻辑，支持本地 + 云端同步"
 
 # 默认全四家
-/crew:race &quot;为这个 bug 提出三种不同架构方案&quot;</code></pre>
-</div>
-<p><strong>返回格式</strong>：先给出“哪个最好 + 理由”，再逐个引用原始输出 + worktree 路径（可手动 <code>git worktree list</code> 后合并）。</p>
-<h3 id="7-crew-pipeline-impl-review-rounds-n-lt-任务-gt">7. /crew:pipeline [--impl <cli>] [--review <cli>] [--rounds N] &lt;任务&gt;</h3>
+/crew:race "为这个 bug 提出三种不同架构方案"</code></pre>
+
+<p><strong>返回格式</strong>：先给出"哪个最好 + 理由"，再逐个引用原始输出 + worktree 路径（可手动 <code>git worktree list</code> 后合并）。</p>
+
+
+
+<h3 id="s5-7">7. /crew:pipeline [&#8208;&#8208;impl &lt;cli&gt;] [&#8208;&#8208;review &lt;cli&gt;] [&#8208;&#8208;rounds N] &lt;任务&gt;<a class="anchor" href="#s5-7">#</a></h3>
 <p>实现 → 审查 → 修复循环。</p>
+
 <ul>
-<li><code>--impl</code> 默认 <code>omp</code></li>
-<li><code>--review</code> 默认 <code>grok</code>（必须与 impl 不同，否则警告但继续）</li>
-<li><code>--rounds</code> 默认 1</li>
-<li><strong>仅支持</strong> <code>--impl</code>、<code>--review</code>、<code>--rounds</code> 三个参数（<code>pipeline.md</code> 不解析 <code>--worktree</code> 等委派旗标）。实现阶段在<strong>当前工作目录</strong>改文件；需要隔离时请先用 <code>/crew:omp --worktree</code> 等单独实现，或改用 <code>/crew:race --write</code>（自动 worktree）。</li>
+  <li><code>--impl</code> 默认 <code>omp</code></li>
+  <li><code>--review</code> 默认 <code>grok</code>（必须与 impl 不同，否则警告但继续）</li>
+  <li><code>--rounds</code> 默认 1</li>
+  <li><code>--worktree</code>：整条流水线跑在同一隔离 worktree 中</li>
+  <li>实现阶段默认在<strong>当前工作目录</strong>改文件；需要隔离时加上 <code>--worktree</code> 旗标。</li>
 </ul>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash"># 默认流水线（omp 实现 → grok 审查，最多 1 轮修复）
-/crew:pipeline &quot;实现一个带缓存的 API 客户端&quot;
+<pre><code># 默认流水线（omp 实现 → grok 审查，最多 1 轮修复）
+/crew:pipeline "实现一个带缓存的 API 客户端"
 
 # 指定 + 多轮
-/crew:pipeline --impl opencode --review omp --rounds 3 &quot;添加完整的错误重试和退避逻辑&quot;</code></pre>
-</div>
+/crew:pipeline --impl opencode --review omp --rounds 3 "添加完整的错误重试和退避逻辑"</code></pre>
+
 <p><strong>流程</strong>：</p>
+
 <ol>
-<li>impl 跑任务（delegate 模式）</li>
-<li>review 跑审查（只读）</li>
-<li>如果有 critical/major 问题且 rounds 剩余 → 带问题描述 resume impl → 再 review</li>
-<li>直到 LGTM 或 rounds 用尽</li>
+  <li>impl 跑任务（delegate 模式）</li>
+  <li>review 跑审查（只读）</li>
+  <li>如果有 critical/major 问题且 rounds 剩余 → 带问题描述 resume impl → 再 review</li>
+  <li>直到 LGTM 或 rounds 用尽</li>
 </ol>
-<h3 id="8-crew-send-task-id-background">8. /crew:send [task-id] [--background] -- &lt;follow-up&gt;</h3>
+
+
+
+<h3 id="s5-8">8. /crew:send [task-id] [&#8208;&#8208;background] &#8208;&#8208; &lt;follow-up&gt;<a class="anchor" href="#s5-8">#</a></h3>
 <p>向<strong>已结束</strong>任务的会话追问（迭代、要改动、追细节）。</p>
+
 <ul>
-<li>task-id 可省略 → 最近任务</li>
-<li>消息必须放在 <code>--</code> 之后</li>
-<li>omp / opencode / grok：优先用任务日志里捕获的 <code>sessionId</code> 精确续跑（<code>-r</code> / <code>-s</code>）；grok 无 <code>sessionId</code> 时用 <code>-c</code></li>
-<li>agy：在该任务的工作目录下用 <code>--continue</code> 续跑</li>
-<li><code>--background</code> 会把追问也作为新后台任务</li>
+  <li>task-id 可省略 → 最近任务</li>
+  <li>消息必须放在 <code>--</code> 之后</li>
+  <li>omp / opencode / grok：优先用任务日志里捕获的 <code>sessionId</code> 精确续跑（<code>-r</code> / <code>-s</code>）；grok 无 <code>sessionId</code> 时用 <code>-c</code></li>
+  <li>agy：在该任务的工作目录下用 <code>--continue</code> 续跑</li>
+  <li><code>--background</code> 会把追问也作为新后台任务</li>
 </ul>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash"># 对最近任务追问
+<pre><code># 对最近任务追问
 /crew:send -- 刚才的实现里加上单元测试
 
 # 指定 id + 后台追问
-/crew:send c-a1b2c3 --background -- &quot;把错误处理改成用 Result 类型&quot;
+/crew:send c-a1b2c3 --background -- "把错误处理改成用 Result 类型"
 
 # 明确 id
-/crew:send c-xyz789 -- &quot;根据审查意见修复第 3 条问题&quot;</code></pre>
+/crew:send c-xyz789 -- "根据审查意见修复第 3 条问题"</code></pre>
+
+<div class="warn-box">
+  <strong>注意</strong>
+  <p>如果任务还在 running，会提示先等或 cancel。</p>
 </div>
-<p><strong>注意</strong>：如果任务还在 running，会提示先等或 cancel。</p>
-<h3 id="9-crew-progress-task-id">9. /crew:progress [task-id]</h3>
+
+
+
+<h3 id="s5-9">9. /crew:progress [task-id]<a class="anchor" href="#s5-9">#</a></h3>
 <p>查看后台任务<strong>实时在做什么</strong>（工具调用、思考、输出片段、成本）。</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash">/crew:progress
+<pre><code>/crew:progress
 
 /crew:progress c-a1b2c3
 
@@ -1037,85 +660,72 @@ opencode | OK         | ...                   | ...</code></pre>
 # 在 Claude Code 中可多次发送：
 /crew:progress c-a1b2c3
 # 等 20s 后再次发送...</code></pre>
-</div>
+
 <p>内部会解析各 CLI 的 JSON 事件流（agy 除外，无事件流）。</p>
-<h3 id="10-crew-status-task-id">10. /crew:status [task-id]</h3>
+
+
+
+<h3 id="s5-10">10. /crew:status [task-id]<a class="anchor" href="#s5-10">#</a></h3>
 <p>列出后台任务（简表：id、status、cli/mode、时间、任务摘要）。</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash">/crew:status
+<pre><code>/crew:status
 
 /crew:status c-a1b2c3</code></pre>
-</div>
+
 <p>状态包括：running / done / failed / interrupted / canceled。</p>
-<h3 id="11-crew-result-task-id">11. /crew:result [task-id]</h3>
+
+
+
+<h3 id="s5-11">11. /crew:result [task-id]<a class="anchor" href="#s5-11">#</a></h3>
 <p>取出后台任务的<strong>最终结果</strong>。</p>
+
 <ul>
-<li>自动解析事件日志中的 finalText、成本、会话 id</li>
-<li>仍 running 时会提示用 progress</li>
-<li>同时打印 worktree 路径（如果有）</li>
+  <li>自动解析事件日志中的 finalText、成本、会话 id</li>
+  <li>仍 running 时会提示用 progress</li>
+  <li>同时打印 worktree 路径（如果有）</li>
 </ul>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash">/crew:result
+<pre><code>/crew:result
 
 /crew:result c-a1b2c3</code></pre>
-</div>
-<h3 id="12-crew-cancel-task-id">12. /crew:cancel [task-id]</h3>
+
+
+
+<h3 id="s5-12">12. /crew:cancel [task-id]<a class="anchor" href="#s5-12">#</a></h3>
 <p>取消正在运行的后台任务（杀进程组 + 标记 canceled）。</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash">/crew:cancel
+<pre><code>/crew:cancel
 
 /crew:cancel c-a1b2c3</code></pre>
-</div>
-<h3 id="13-crew-setup">13. /crew:setup</h3>
-<p>见“环境检查”一节。</p>
-<h2 id="后台任务完整生命周期-推荐流程">后台任务完整生命周期（推荐流程）</h2>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash"># 1. 派发长任务（后台）
-/crew:omp --background --worktree &quot;重构整个认证系统并写完整测试&quot;
+
+
+<h3 id="s5-13">13. /crew:costs<a class="anchor" href="#s5-13">#</a></h3>
+<p>查看成本台账：今天和累计各 CLI 花了多少（基于 costs.jsonl）。</p>
+
+<pre><code>/crew:costs</code></pre>
+
+<p>输出示例：</p>
+
+<pre><code>CLI      | 今天       | 累计
+omp      | $3.42      | $127.85
+grok     | $1.20      | $45.30
+agy      | $0.00      | $12.00
+opencode | $0.85      | $23.50</code></pre>
+
+<p>数据来源为 <code>~/.crew/costs.jsonl</code>，每次任务结束自动追加。</p>
+
+
+
+<h3 id="s5-14">14. /crew:setup<a class="anchor" href="#s5-14">#</a></h3>
+<p>见"环境检查"一节。</p>
+
+
+
+<h2 id="s6">后台任务完整生命周期（推荐流程）<a class="anchor" href="#s6">#</a></h2>
+
+<pre><code># 1. 派发长任务（后台）
+/crew:omp --background --worktree "重构整个认证系统并写完整测试"
 
 # 输出示例：
 # 已启动后台任务 c-7f8e9d（omp/delegate）。
@@ -1129,40 +739,39 @@ opencode | OK         | ...                   | ...</code></pre>
 /crew:result c-7f8e9d
 
 # 4. 追问续跑（基于原会话）
-/crew:send c-7f8e9d -- &quot;根据结果再加一个登出接口&quot;
+/crew:send c-7f8e9d -- "根据结果再加一个登出接口"
 
 # 5. 取消（仅 running 时有效）
 /crew:cancel c-7f8e9d</code></pre>
-</div>
-<p><strong>提示</strong>：</p>
-<ul>
-<li>想让 Claude Code 自动轮询：可以让它多次调用 progress，直到状态不是 running。</li>
-<li>所有后台任务状态持久化在 <code>~/.crew/jobs/*.json</code>。</li>
-</ul>
-<h2 id="5-个-subagent-类型的编排用法">5 个 Subagent 类型的编排用法</h2>
-<p>插件注册了 5 个具名 subagent（可在 Claude Code 的 <code>Agent</code> 工具或 Workflow 中直接使用）：</p>
-<ol>
-<li><code>crew:crew-runner</code>（内部薄转发器）</li>
-<li><code>crew:crew-omp</code></li>
-<li><code>crew:crew-grok</code></li>
-<li><code>crew:crew-agy</code></li>
-<li><code>crew:crew-opencode</code></li>
-</ol>
-<p><strong>特点</strong>：这些 agent <strong>只做一件事</strong>——调用 companion 脚本并<strong>原样返回 stdout</strong>。不读文件、不总结、不做额外工作。</p>
-<h3 id="直接在-agent-工具中使用-示例">直接在 Agent 工具中使用（示例）</h3>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">xml</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-xml"><code class="language-xml">&lt;use_tool&gt;
+<div class="tip-box">
+  <strong>提示</strong>
+  <ul>
+    <li>想让 Claude Code 自动轮询：可以让它多次调用 progress，直到状态不是 running。</li>
+    <li>所有后台任务状态持久化在 <code>~/.crew/jobs/*.json</code>。</li>
+    <li>后台任务完成后会弹出 <strong>macOS 桌面通知</strong>（v0.5.0+）。</li>
+  </ul>
+</div>
+
+
+
+<h2 id="s7">5 个 Subagent 类型的编排用法<a class="anchor" href="#s7">#</a></h2>
+
+<p>插件注册了 5 个具名 subagent（可在 Claude Code 的 <code>Agent</code> 工具或 Workflow 中直接使用）：</p>
+
+<ol>
+  <li><code>crew:crew-runner</code>（内部薄转发器）</li>
+  <li><code>crew:crew-omp</code></li>
+  <li><code>crew:crew-grok</code></li>
+  <li><code>crew:crew-agy</code></li>
+  <li><code>crew:crew-opencode</code></li>
+</ol>
+
+<p><strong>特点</strong>：这些 agent <strong>只做一件事</strong>——调用 companion 脚本并<strong>原样返回 stdout</strong>。不读文件、不总结、不做额外工作。</p>
+
+<h3 id="s7-1">直接在 Agent 工具中使用（示例）<a class="anchor" href="#s7-1">#</a></h3>
+
+<pre><code>&lt;use_tool&gt;
 &lt;tool_name&gt;Agent&lt;/tool_name&gt;
 &lt;parameters&gt;
 &lt;subagent_type&gt;crew:crew-grok&lt;/subagent_type&gt;
@@ -1170,28 +779,18 @@ opencode | OK         | ...                   | ...</code></pre>
 &lt;run_in_background&gt;true&lt;/run_in_background&gt;
 &lt;/parameters&gt;
 &lt;/use_tool&gt;</code></pre>
-</div>
-<h3 id="典型编排模式">典型编排模式</h3>
-<p><strong>并行 fan-out</strong>（race 类似）：
-同时调用 <code>crew:crew-omp</code>、<code>crew:crew-grok</code>、<code>crew:crew-agy</code>，然后在主会话汇总。</p>
-<p><strong>串行 pipeline</strong>：
-先 <code>crew:crew-omp</code>（impl）→ 然后把输出 + diff 喂给 <code>crew:crew-grok</code>（review）。</p>
-<p><strong>Judge / 选择器</strong>：
-跑多个 → 让 Claude Code 或另一个 agent 挑最好的。</p>
+
+<h3 id="s7-2">典型编排模式<a class="anchor" href="#s7-2">#</a></h3>
+
+<p><strong>并行 fan-out</strong>（race 类似）：<br>同时调用 <code>crew:crew-omp</code>、<code>crew:crew-grok</code>、<code>crew:crew-agy</code>，然后在主会话汇总。</p>
+
+<p><strong>串行 pipeline</strong>：<br>先 <code>crew:crew-omp</code>（impl）&rarr; 然后把输出 + diff 喂给 <code>crew:crew-grok</code>（review）。</p>
+
+<p><strong>Judge / 选择器</strong>：<br>跑多个 &rarr; 让 Claude Code 或另一个 agent 挑最好的。</p>
+
 <p><strong>带 resume 的复杂流程</strong>：</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">xml</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-xml"><code class="language-xml">&lt;!-- 第一次 --&gt;
+<pre><code>&lt;!-- 第一次 --&gt;
 &lt;use_tool&gt;
 &lt;subagent_type&gt;crew:crew-opencode&lt;/subagent_type&gt;
 &lt;task&gt;实现功能 X&lt;/task&gt;
@@ -1203,276 +802,135 @@ opencode | OK         | ...                   | ...</code></pre>
 &lt;task&gt;继续上一步，修复 review 指出的问题&lt;/task&gt;
 &lt;!-- 实际续跑由 companion 的 --resume 机制或 send 命令处理 --&gt;
 &lt;/use_tool&gt;</code></pre>
-</div>
-<p><strong>推荐</strong>：复杂编排时优先用 <code>/crew:race</code> 和 <code>/crew:pipeline</code>。<code>/crew:pipeline</code> 内部编排多个 subagent，负责实现→审查→修复循环及 review 只读语义。worktree 隔离由 <code>/crew:race --write</code> 自动处理，或由 <code>/crew:omp</code> 等委派命令的 <code>--worktree</code> 提供。</p>
+
+<p><strong>推荐</strong>：复杂编排时优先用 <code>/crew:race</code> 和 <code>/crew:pipeline</code>。<code>/crew:pipeline</code> 内部编排多个 subagent，负责实现&rarr;审查&rarr;修复循环及 review 只读语义。worktree 隔离由 <code>/crew:race --write</code> 自动处理，或由 <code>/crew:omp</code> 等委派命令的 <code>--worktree</code> 提供。</p>
+
 <p><strong>直接使用具名 agent</strong> 的好处：</p>
+
 <ul>
-<li>Workflow / 自定义 agent 可以 fan-out。</li>
-<li>精确控制哪家 CLI 执行哪一步。</li>
-<li>后台：Agent 工具的 <code>run_in_background: true</code> 生效；<code>--worktree</code>、<code>--resume</code> 等 companion 旗标需经 <code>/crew:omp</code> 等斜杠命令路由，或在 <code>task</code> 文本里写明由主会话转发给 <code>crew:crew-runner</code>。</li>
+  <li>Workflow / 自定义 agent 可以 fan-out。</li>
+  <li>精确控制哪家 CLI 执行哪一步。</li>
+  <li>后台：Agent 工具的 <code>run_in_background: true</code> 生效；<code>--worktree</code>、<code>--resume</code> 等 companion 旗标需经 <code>/crew:omp</code> 等斜杠命令路由，或在 <code>task</code> 文本里写明由主会话转发给 <code>crew:crew-runner</code></li>
 </ul>
-<h2 id="已知问题-amp-注意事项">已知问题 &amp; 注意事项</h2>
+
+
+
+<h2 id="s8">已知问题 &amp; 注意事项<a class="anchor" href="#s8">#</a></h2>
+
 <ol>
-<li><p><strong>agy 的 -p（headless/print）模式 token 过期</strong></p>
-<ul>
-<li>agy 在非交互 <code>-p</code> 模式下，认证 token 有时会过期。</li>
-<li><strong>解决</strong>：手动在终端运行一次交互式 <code>agy</code>（或 <code>agy login</code> / 相应刷新命令），完成浏览器/终端登录后，headless 模式才能继续使用。</li>
-<li>crew 不会自动处理 agy 认证。</li>
-</ul>
-</li>
-<li><p><strong>agy 不支持事件流（progress 解析有限）</strong></p>
-<ul>
-<li>后台 agy 任务的 <code>/crew:progress</code> 只能显示最后几行原始输出，没有结构化“思考/工具/成本”。</li>
-<li>其他 CLI（omp/grok/opencode）支持 JSON streaming，progress 更丰富。</li>
-</ul>
-</li>
-<li><p><strong>worktree 清理</strong></p>
-<ul>
-<li>用完隔离 worktree 后需手动清理：
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash">git worktree list
+  <li>
+    <p><strong>agy 的 -p（headless/print）模式 token 过期</strong></p>
+    <ul>
+      <li>agy 在非交互 <code>-p</code> 模式下，认证 token 有时会过期。</li>
+      <li><strong>解决</strong>：手动在终端运行一次交互式 <code>agy</code>（或 <code>agy login</code> / 相应刷新命令），完成浏览器/终端登录后，headless 模式才能继续使用。</li>
+      <li><strong>v0.6.0 改进</strong>：<code>/crew:result</code> 和 <code>/crew:progress</code> 能自动识别 agy 认证过期并给出修复提示。</li>
+      <li>crew 不会自动处理 agy 认证。</li>
+    </ul>
+  </li>
+
+  <li>
+    <p><strong>agy 不支持事件流（progress 解析有限）</strong></p>
+    <ul>
+      <li>后台 agy 任务的 <code>/crew:progress</code> 只能显示最后几行原始输出，没有结构化"思考/工具/成本"。</li>
+      <li>其他 CLI（omp/grok/opencode）支持 JSON streaming，progress 更丰富。</li>
+    </ul>
+  </li>
+
+  <li>
+    <p><strong>MCP server 不可达</strong></p>
+    <ul>
+      <li><strong>v0.6.0 改进</strong>：<code>/crew:result</code> 和 <code>/crew:progress</code> 能识别 MCP server 不可达等已知失败模式并给修复提示。</li>
+    </ul>
+  </li>
+
+  <li>
+    <p><strong>worktree 清理</strong></p>
+    <ul>
+      <li>用完隔离 worktree 后需手动清理：
+<pre><code>git worktree list
 git worktree remove /path/to/.crew/worktrees/c-xxx</code></pre>
-</div>
-</li>
-<li>插件不会自动删除。</li>
-</ul>
-</li>
-<li><p><strong>长时间任务超时</strong></p>
-<ul>
-<li>前台任务 companion 设置 10 分钟 timeout（600000ms）。</li>
-<li>预计更长 → 必须加 <code>--background</code>。</li>
-</ul>
-</li>
-<li><p><strong>resume 行为差异</strong></p>
-<ul>
-<li>omp / opencode / grok：有 <code>sessionId</code> 时用 <code>-r</code> / <code>-s</code> 精确续跑（最可靠）；grok 无 <code>sessionId</code> 时退化为 <code>-c</code>。</li>
-<li>agy：resume 固定 <code>--continue</code>，依赖该任务目录下的最近会话，不如精确 <code>sessionId</code> 稳定。</li>
-</ul>
-</li>
-<li><p><strong>权限与危险操作</strong></p>
-<ul>
-<li>agy 默认加 <code>--dangerously-skip-permissions</code>（非 review 模式）。</li>
-<li>grok 用 <code>--permission-mode acceptEdits</code>。</li>
-<li>review 模式永远不会让任何 CLI 改文件。</li>
-</ul>
-</li>
-<li><p><strong>状态文件损坏</strong></p>
-<ul>
-<li>如遇异常，可手动清理 <code>~/.crew/jobs/</code> 下的旧 json（谨慎）。</li>
-</ul>
-</li>
-<li><p><strong>CLI 版本兼容</strong></p>
-<ul>
-<li>各 CLI 的无头参数（<code>-p</code>、<code>-r</code>、<code>-c</code>、JSON 格式）可能随版本变化。遇到问题先 <code>/crew:setup</code> 确认版本，并更新对应 CLI。</li>
-</ul>
-</li>
+      </li>
+      <li>插件不会自动删除。</li>
+    </ul>
+  </li>
+
+  <li>
+    <p><strong>长时间任务超时</strong></p>
+    <ul>
+      <li>前台任务 companion 设置 10 分钟 timeout（600000ms）。</li>
+      <li>预计更长 → 必须加 <code>--background</code>。</li>
+    </ul>
+  </li>
+
+  <li>
+    <p><strong>resume 行为差异</strong></p>
+    <ul>
+      <li>omp / opencode / grok：有 <code>sessionId</code> 时用 <code>-r</code> / <code>-s</code> 精确续跑（最可靠）；grok 无 <code>sessionId</code> 时退化为 <code>-c</code>。</li>
+      <li>agy：resume 固定 <code>--continue</code>，依赖该任务目录下的最近会话，不如精确 <code>sessionId</code> 稳定。</li>
+    </ul>
+  </li>
+
+  <li>
+    <p><strong>权限与危险操作</strong></p>
+    <ul>
+      <li>agy 默认加 <code>--dangerously-skip-permissions</code>（非 review 模式）。</li>
+      <li>grok 用 <code>--permission-mode acceptEdits</code>。</li>
+      <li>review 模式永远不会让任何 CLI 改文件。</li>
+    </ul>
+  </li>
+
+  <li>
+    <p><strong>状态文件损坏</strong></p>
+    <ul>
+      <li>如遇异常，可手动清理 <code>~/.crew/jobs/</code> 下的旧 json（谨慎）。</li>
+    </ul>
+  </li>
+
+  <li>
+    <p><strong>CLI 版本兼容</strong></p>
+    <ul>
+      <li>各 CLI 的无头参数（<code>-p</code>、<code>-r</code>、<code>-c</code>、JSON 格式）可能随版本变化。遇到问题先 <code>/crew:setup</code> 确认版本，并更新对应 CLI。</li>
+    </ul>
+  </li>
 </ol>
-<h2 id="最佳实践建议">最佳实践建议</h2>
+
+
+
+<h2 id="s9">最佳实践建议<a class="anchor" href="#s9">#</a></h2>
+
 <ul>
-<li>长任务一律 <code>--background --worktree</code>。</li>
-<li>写代码前先 <code>/crew:review --by grok</code> 看当前状态。</li>
-<li>重要改动用 <code>race --write</code> 让多家比对。</li>
-<li>质量关键路径用 <code>pipeline --rounds 2+</code>。</li>
-<li>追问时用 <code>/crew:send</code>，不要重新贴整段历史。</li>
-<li>定期 <code>/crew:setup</code> 检查环境。</li>
-<li>想用在自定义 Workflow → 直接引用 <code>crew:crew-*</code> subagent。</li>
+  <li>长任务一律 <code>--background --worktree</code>。</li>
+  <li>写代码前先 <code>/crew:review --by grok</code> 看当前状态。</li>
+  <li>重要改动用 <code>race --write</code> 让多家比对。</li>
+  <li>质量关键路径用 <code>pipeline --rounds 2+</code>。</li>
+  <li>追问时用 <code>/crew:send</code>，不要重新贴整段历史。</li>
+  <li>定期 <code>/crew:setup</code> 检查环境。</li>
+  <li>想用在自定义 Workflow → 直接引用 <code>crew:crew-*</code> subagent。</li>
 </ul>
+
 <hr>
-<p><strong>反馈与贡献</strong><br>本指南基于 <code>plugins/crew/</code> 下所有命令、agent 定义和 <code>crew-companion.mjs</code> 的源码注释与参数解析逻辑编写（v0.4.0）。</p>
+
+<p><strong>反馈与贡献</strong><br>
+本指南基于 <code>plugins/crew/</code> 下所有命令、agent 定义和 <code>crew-companion.mjs</code> 的源码注释与参数解析逻辑编写（v0.6.0）。</p>
+
+<p><strong>版本演进摘要</strong>：</p>
+<ul>
+  <li><strong>v0.5.0</strong>：前台任务 id 追踪 + <code>/crew:send</code> 打通；<code>--resume</code> 自动精确会话 id；<code>--cwd</code> 旗标；<code>/crew:pipeline --worktree</code>；macOS 桌面通知；7 天自动清理；costs.jsonl 成本台账。</li>
+  <li><strong>v0.6.0</strong>（robustness）：<code>--task-stdin</code> + heredoc 防截断；假成功识别（stopReason=Cancelled &rarr; failed）；委派无产出标注"结果存疑"；agy/MCP 失败模式诊断。</li>
+</ul>
+
 <p>直接在 Claude Code 里尝试第一个命令：</p>
 
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-block-lang">bash</span>
-    <button class="copy-button" aria-label="Copy code">
-      <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="copy-text">复制</span>
-    </button>
-  </div>
-  <pre class="language-bash"><code class="language-bash">/crew:setup</code></pre>
-</div>
+<pre><code>/crew:setup</code></pre>
+
 <p>祝使用愉快！把复杂任务交给 crew，让 Claude Code 专注编排。</p>
 
-    </article>
-  </main>
+</main>
+</div>
 
-  <!-- 浮动操作按钮 -->
-  <div class="floating-actions">
-    <!-- 菜单按钮 (仅移动端可见) -->
-    <button class="floating-btn menu-toggle" id="menuToggle" aria-label="Toggle navigation menu">
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="3" y1="12" x2="21" y2="12"></line>
-        <line x1="3" y1="6" x2="21" y2="6"></line>
-        <line x1="3" y1="18" x2="21" y2="18"></line>
-      </svg>
-    </button>
-    <!-- 主题切换按钮 -->
-    <button class="floating-btn theme-toggle" id="themeToggle" aria-label="Toggle theme">
-      <!-- 太阳图标 -->
-      <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
-        <circle cx="12" cy="12" r="5"></circle>
-        <line x1="12" y1="1" x2="12" y2="3"></line>
-        <line x1="12" y1="21" x2="12" y2="23"></line>
-        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-        <line x1="1" y1="12" x2="3" y2="12"></line>
-        <line x1="21" y1="12" x2="23" y2="12"></line>
-        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-      </svg>
-      <!-- 月亮图标 -->
-      <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-      </svg>
-    </button>
-  </div>
+<div class="footer">
+  crew v0.6.0 &mdash; Claude Code 多 Agent 编排插件
+</div>
 
-  <!-- Prism 核心和高亮组件 -->
-  <script>
-    var _self="undefined"!=typeof window?window:"undefined"!=typeof WorkerGlobalScope&&self instanceof WorkerGlobalScope?self:{},Prism=function(l){var n=/(?:^|\s)lang(?:uage)?-([\w-]+)(?=\s|$)/i,t=0,e={},j={manual:l.Prism&&l.Prism.manual,disableWorkerMessageHandler:l.Prism&&l.Prism.disableWorkerMessageHandler,util:{encode:function e(t){return t instanceof C?new C(t.type,e(t.content),t.alias):Array.isArray(t)?t.map(e):t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\u00a0/g," ")},type:function(e){return Object.prototype.toString.call(e).slice(8,-1)},objId:function(e){return e.__id||Object.defineProperty(e,"__id",{value:++t}),e.__id},clone:function n(e,a){var r,t;switch(a=a||{},j.util.type(e)){case"Object":if(t=j.util.objId(e),a[t])return a[t];for(var s in r={},a[t]=r,e)e.hasOwnProperty(s)&&(r[s]=n(e[s],a));return r;case"Array":return(t=j.util.objId(e),a[t])?a[t]:(r=[],a[t]=r,e.forEach(function(e,t){r[t]=n(e,a)}),r);default:return e}},getLanguage:function(e){for(;e;){var t=n.exec(e.className);if(t)return t[1].toLowerCase();e=e.parentElement}return"none"},setLanguage:function(e,t){e.className=e.className.replace(RegExp(n,"gi"),""),e.classList.add("language-"+t)},currentScript:function(){if("undefined"==typeof document)return null;if("currentScript"in document)return document.currentScript;try{throw new Error}catch(e){var t=(/at [^(\r\n]*\((.*):[^:]+:[^:]+\)$/i.exec(e.stack)||[])[1];if(t){var n,a=document.getElementsByTagName("script");for(n in a)if(a[n].src==t)return a[n]}return null}},isActive:function(e,t,n){for(var a="no-"+t;e;){var r=e.classList;if(r.contains(t))return!0;if(r.contains(a))return!1;e=e.parentElement}return!!n}},languages:{plain:e,plaintext:e,text:e,txt:e,extend:function(e,t){var n,a=j.util.clone(j.languages[e]);for(n in t)a[n]=t[n];return a},insertBefore:function(n,e,t,a){var r,s=(a=a||j.languages)[n],i={};for(r in s)if(s.hasOwnProperty(r)){if(r==e)for(var o in t)t.hasOwnProperty(o)&&(i[o]=t[o]);t.hasOwnProperty(r)||(i[r]=s[r])}var l=a[n];return a[n]=i,j.languages.DFS(j.languages,function(e,t){t===l&&e!=n&&(this[e]=i)}),i},DFS:function e(t,n,a,r){r=r||{};var s,i,o,l=j.util.objId;for(s in t)t.hasOwnProperty(s)&&(n.call(t,s,t[s],a||s),i=t[s],"Object"!==(o=j.util.type(i))||r[l(i)]?"Array"!==o||r[l(i)]||(r[l(i)]=!0,e(i,n,s,r)):(r[l(i)]=!0,e(i,n,null,r)))}},plugins:{},highlightAll:function(e,t){j.highlightAllUnder(document,e,t)},highlightAllUnder:function(e,t,n){var a={callback:n,container:e,selector:'code[class*="language-"], [class*="language-"] code, code[class*="lang-"], [class*="lang-"] code'};j.hooks.run("before-highlightall",a),a.elements=Array.prototype.slice.apply(a.container.querySelectorAll(a.selector)),j.hooks.run("before-all-elements-highlight",a);for(var r,s=0;r=a.elements[s++];)j.highlightElement(r,!0===t,a.callback)},highlightElement:function(e,t,n){var a=j.util.getLanguage(e),r=j.languages[a],s=(j.util.setLanguage(e,a),e.parentElement);s&&"pre"===s.nodeName.toLowerCase()&&j.util.setLanguage(s,a);var i={element:e,language:a,grammar:r,code:e.textContent};function o(e){i.highlightedCode=e,j.hooks.run("before-insert",i),i.element.innerHTML=i.highlightedCode,j.hooks.run("after-highlight",i),j.hooks.run("complete",i),n&&n.call(i.element)}if(j.hooks.run("before-sanity-check",i),(s=i.element.parentElement)&&"pre"===s.nodeName.toLowerCase()&&!s.hasAttribute("tabindex")&&s.setAttribute("tabindex","0"),!i.code)return j.hooks.run("complete",i),void(n&&n.call(i.element));j.hooks.run("before-highlight",i),i.grammar?t&&l.Worker?((a=new Worker(j.filename)).onmessage=function(e){o(e.data)},a.postMessage(JSON.stringify({language:i.language,code:i.code,immediateClose:!0}))):o(j.highlight(i.code,i.grammar,i.language)):o(j.util.encode(i.code))},highlight:function(e,t,n){e={code:e,grammar:t,language:n};if(j.hooks.run("before-tokenize",e),e.grammar)return e.tokens=j.tokenize(e.code,e.grammar),j.hooks.run("after-tokenize",e),C.stringify(j.util.encode(e.tokens),e.language);throw new Error('The language "'+e.language+'" has no grammar.')},tokenize:function(e,t){var n=t.rest;if(n){for(var a in n)t[a]=n[a];delete t.rest}for(var r=new u,s=(z(r,r.head,e),!function e(t,n,a,r,s,i){for(var o in a)if(a.hasOwnProperty(o)&&a[o]){var l=a[o];l=Array.isArray(l)?l:[l];for(var u=0;u<l.length;++u){if(i&&i.cause==o+","+u)return;for(var g,c=l[u],d=c.inside,p=!!c.lookbehind,m=!!c.greedy,h=c.alias,f=(m&&!c.pattern.global&&(g=c.pattern.toString().match(/[imsuy]*$/)[0],c.pattern=RegExp(c.pattern.source,g+"g")),c.pattern||c),b=r.next,y=s;b!==n.tail&&!(i&&y>=i.reach);y+=b.value.length,b=b.next){var v=b.value;if(n.length>t.length)return;if(!(v instanceof C)){var F,x=1;if(m){if(!(F=L(f,y,t,p))||F.index>=t.length)break;var k=F.index,w=F.index+F[0].length,A=y;for(A+=b.value.length;A<=k;)b=b.next,A+=b.value.length;if(A-=b.value.length,y=A,b.value instanceof C)continue;for(var P=b;P!==n.tail&&(A<w||"string"==typeof P.value);P=P.next)x++,A+=P.value.length;x--,v=t.slice(y,A),F.index-=y}else if(!(F=L(f,0,v,p)))continue;var k=F.index,$=F[0],S=v.slice(0,k),E=v.slice(k+$.length),v=y+v.length,_=(i&&v>i.reach&&(i.reach=v),b.prev),S=(S&&(_=z(n,_,S),y+=S.length),O(n,_,x),new C(o,d?j.tokenize($,d):$,h,$));b=z(n,_,S),E&&z(n,b,E),1<x&&($={cause:o+","+u,reach:v},e(t,n,a,b.prev,y,$),i&&$.reach>i.reach&&(i.reach=$.reach))}}}}}(e,r,t,r.head,0),r),i=[],o=s.head.next;o!==s.tail;)i.push(o.value),o=o.next;return i},hooks:{all:{},add:function(e,t){var n=j.hooks.all;n[e]=n[e]||[],n[e].push(t)},run:function(e,t){var n=j.hooks.all[e];if(n&&n.length)for(var a,r=0;a=n[r++];)a(t)}},Token:C};function C(e,t,n,a){this.type=e,this.content=t,this.alias=n,this.length=0|(a||"").length}function L(e,t,n,a){e.lastIndex=t;t=e.exec(n);return t&&a&&t[1]&&(e=t[1].length,t.index+=e,t[0]=t[0].slice(e)),t}function u(){var e={value:null,prev:null,next:null},t={value:null,prev:e,next:null};e.next=t,this.head=e,this.tail=t,this.length=0}function z(e,t,n){var a=t.next,n={value:n,prev:t,next:a};return t.next=n,a.prev=n,e.length++,n}function O(e,t,n){for(var a=t.next,r=0;r<n&&a!==e.tail;r++)a=a.next;(t.next=a).prev=t,e.length-=r}if(l.Prism=j,C.stringify=function t(e,n){if("string"==typeof e)return e;var a;if(Array.isArray(e))return a="",e.forEach(function(e){a+=t(e,n)}),a;var r,s={type:e.type,content:t(e.content,n),tag:"span",classes:["token",e.type],attributes:{},language:n},e=e.alias,i=(e&&(Array.isArray(e)?Array.prototype.push.apply(s.classes,e):s.classes.push(e)),j.hooks.run("wrap",s),"");for(r in s.attributes)i+=" "+r+'="'+(s.attributes[r]||"").replace(/"/g,"&quot;")+'"';return"<"+s.tag+' class="'+s.classes.join(" ")+'"'+i+">"+s.content+"</"+s.tag+">"},!l.document)return l.addEventListener&&(j.disableWorkerMessageHandler||l.addEventListener("message",function(e){var e=JSON.parse(e.data),t=e.language,n=e.code,e=e.immediateClose;l.postMessage(j.highlight(n,j.languages[t],t)),e&&l.close()},!1)),j;var a,e=j.util.currentScript();function r(){j.manual||j.highlightAll()}return e&&(j.filename=e.src,e.hasAttribute("data-manual")&&(j.manual=!0)),j.manual||("loading"===(a=document.readyState)||"interactive"===a&&e&&e.defer?document.addEventListener("DOMContentLoaded",r):window.requestAnimationFrame?window.requestAnimationFrame(r):window.setTimeout(r,16)),j}(_self);"undefined"!=typeof module&&module.exports&&(module.exports=Prism),"undefined"!=typeof global&&(global.Prism=Prism),Prism.languages.markup={comment:{pattern:/<!--(?:(?!<!--)[\s\S])*?-->/,greedy:!0},prolog:{pattern:/<\?[\s\S]+?\?>/,greedy:!0},doctype:{pattern:/<!DOCTYPE(?:[^>"'[\]]|"[^"]*"|'[^']*')+(?:\[(?:[^<"'\]]|"[^"]*"|'[^']*'|<(?!!--)|<!--(?:[^-]|-(?!->))*-->)*\]\s*)?>/i,greedy:!0,inside:{"internal-subset":{pattern:/(^[^\[]*\[)[\s\S]+(?=\]>$)/,lookbehind:!0,greedy:!0,inside:null},string:{pattern:/"[^"]*"|'[^']*'/,greedy:!0},punctuation:/^<!|>$|[[\]]/,"doctype-tag":/^DOCTYPE/i,name:/[^\s<>'"]+/}},cdata:{pattern:/<!\[CDATA\[[\s\S]*?\]\]>/i,greedy:!0},tag:{pattern:/<\/?(?!\d)[^\s>\/=$<%]+(?:\s(?:\s*[^\s>\/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s'">=]+(?=[\s>]))|(?=[\s/>])))+)?\s*\/?>/,greedy:!0,inside:{tag:{pattern:/^<\/?[^\s>\/]+/,inside:{punctuation:/^<\/?/,namespace:/^[^\s>\/:]+:/}},"special-attr":[],"attr-value":{pattern:/=\s*(?:"[^"]*"|'[^']*'|[^\s'">=]+)/,inside:{punctuation:[{pattern:/^=/,alias:"attr-equals"},{pattern:/^(\s*)["']|["']$/,lookbehind:!0}]}},punctuation:/\/?>/,"attr-name":{pattern:/[^\s>\/]+/,inside:{namespace:/^[^\s>\/:]+:/}}}},entity:[{pattern:/&[\da-z]{1,8};/i,alias:"named-entity"},/&#x?[\da-f]{1,8};/i]},Prism.languages.markup.tag.inside["attr-value"].inside.entity=Prism.languages.markup.entity,Prism.languages.markup.doctype.inside["internal-subset"].inside=Prism.languages.markup,Prism.hooks.add("wrap",function(e){"entity"===e.type&&(e.attributes.title=e.content.replace(/&amp;/,"&"))}),Object.defineProperty(Prism.languages.markup.tag,"addInlined",{value:function(e,t){var n={},n=(n["language-"+t]={pattern:/(^<!\[CDATA\[)[\s\S]+?(?=\]\]>$)/i,lookbehind:!0,inside:Prism.languages[t]},n.cdata=/^<!\[CDATA\[|\]\]>$/i,{"included-cdata":{pattern:/<!\[CDATA\[[\s\S]*?\]\]>/i,inside:n}}),t=(n["language-"+t]={pattern:/[\s\S]+/,inside:Prism.languages[t]},{});t[e]={pattern:RegExp(/(<__[^>]*>)(?:<!\[CDATA\[(?:[^\]]|\](?!\]>))*\]\]>|(?!<!\[CDATA\[)[\s\S])*?(?=<\/__>)/.source.replace(/__/g,function(){return e}),"i"),lookbehind:!0,greedy:!0,inside:n},Prism.languages.insertBefore("markup","cdata",t)}}),Object.defineProperty(Prism.languages.markup.tag,"addAttribute",{value:function(e,t){Prism.languages.markup.tag.inside["special-attr"].push({pattern:RegExp(/(^|["'\s])/.source+"(?:"+e+")"+/\s*=\s*(?:"[^"]*"|'[^']*'|[^\s'">=]+(?=[\s>]))/.source,"i"),lookbehind:!0,inside:{"attr-name":/^[^\s=]+/,"attr-value":{pattern:/=[\s\S]+/,inside:{value:{pattern:/(^=\s*(["']|(?!["'])))\S[\s\S]*(?=\2$)/,lookbehind:!0,alias:[t,"language-"+t],inside:Prism.languages[t]},punctuation:[{pattern:/^=/,alias:"attr-equals"},/"|'/]}}}})}}),Prism.languages.html=Prism.languages.markup,Prism.languages.mathml=Prism.languages.markup,Prism.languages.svg=Prism.languages.markup,Prism.languages.xml=Prism.languages.extend("markup",{}),Prism.languages.ssml=Prism.languages.xml,Prism.languages.atom=Prism.languages.xml,Prism.languages.rss=Prism.languages.xml,function(e){var t=/(?:"(?:\\(?:\r\n|[\s\S])|[^"\\\r\n])*"|'(?:\\(?:\r\n|[\s\S])|[^'\\\r\n])*')/,t=(e.languages.css={comment:/\/\*[\s\S]*?\*\//,atrule:{pattern:RegExp("@[\\w-](?:"+/[^;{\s"']|\s+(?!\s)/.source+"|"+t.source+")*?"+/(?:;|(?=\s*\{))/.source),inside:{rule:/^@[\w-]+/,"selector-function-argument":{pattern:/(\bselector\s*\(\s*(?![\s)]))(?:[^()\s]|\s+(?![\s)])|\((?:[^()]|\([^()]*\))*\))+(?=\s*\))/,lookbehind:!0,alias:"selector"},keyword:{pattern:/(^|[^\w-])(?:and|not|only|or)(?![\w-])/,lookbehind:!0}}},url:{pattern:RegExp("\\burl\\((?:"+t.source+"|"+/(?:[^\\\r\n()"']|\\[\s\S])*/.source+")\\)","i"),greedy:!0,inside:{function:/^url/i,punctuation:/^\(|\)$/,string:{pattern:RegExp("^"+t.source+"$"),alias:"url"}}},selector:{pattern:RegExp("(^|[{}\\s])[^{}\\s](?:[^{};\"'\\s]|\\s+(?![\\s{])|"+t.source+")*(?=\\s*\\{)"),lookbehind:!0},string:{pattern:t,greedy:!0},property:{pattern:/(^|[^-\w\xA0-\uFFFF])(?!\s)[-_a-z\xA0-\uFFFF](?:(?!\s)[-\w\xA0-\uFFFF])*(?=\s*:)/i,lookbehind:!0},important:/!important\b/i,function:{pattern:/(^|[^-a-z0-9])[-a-z0-9]+(?=\()/i,lookbehind:!0},punctuation:/[(){};:,]/},e.languages.css.atrule.inside.rest=e.languages.css,e.languages.markup);t&&(t.tag.addInlined("style","css"),t.tag.addAttribute("style","css"))}(Prism),Prism.languages.clike={comment:[{pattern:/(^|[^\\])\/\*[\s\S]*?(?:\*\/|$)/,lookbehind:!0,greedy:!0},{pattern:/(^|[^\\:])\/\/.*/,lookbehind:!0,greedy:!0}],string:{pattern:/(["'])(?:\\(?:\r\n|[\s\S])|(?!\1)[^\\\r\n])*\1/,greedy:!0},"class-name":{pattern:/(\b(?:class|extends|implements|instanceof|interface|new|trait)\s+|\bcatch\s+\()[\w.\\]+/i,lookbehind:!0,inside:{punctuation:/[.\\]/}},keyword:/\b(?:break|catch|continue|do|else|finally|for|function|if|in|instanceof|new|null|return|throw|try|while)\b/,boolean:/\b(?:false|true)\b/,function:/\b\w+(?=\()/,number:/\b0x[\da-f]+\b|(?:\b\d+(?:\.\d*)?|\B\.\d+)(?:e[+-]?\d+)?/i,operator:/[<>]=?|[!=]=?=?|--?|\+\+?|&&?|\|\|?|[?*/~^%]/,punctuation:/[{}[\];(),.:]/},Prism.languages.javascript=Prism.languages.extend("clike",{"class-name":[Prism.languages.clike["class-name"],{pattern:/(^|[^$\w\xA0-\uFFFF])(?!\s)[_$A-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\.(?:constructor|prototype))/,lookbehind:!0}],keyword:[{pattern:/((?:^|\})\s*)catch\b/,lookbehind:!0},{pattern:/(^|[^.]|\.\.\.\s*)\b(?:as|assert(?=\s*\{)|async(?=\s*(?:function\b|\(|[$\w\xA0-\uFFFF]|$))|await|break|case|class|const|continue|debugger|default|delete|do|else|enum|export|extends|finally(?=\s*(?:\{|$))|for|from(?=\s*(?:['"]|$))|function|(?:get|set)(?=\s*(?:[#\[$\w\xA0-\uFFFF]|$))|if|implements|import|in|instanceof|interface|let|new|null|of|package|private|protected|public|return|static|super|switch|this|throw|try|typeof|undefined|var|void|while|with|yield)\b/,lookbehind:!0}],function:/#?(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*(?:\.\s*(?:apply|bind|call)\s*)?\()/,number:{pattern:RegExp(/(^|[^\w$])/.source+"(?:"+/NaN|Infinity/.source+"|"+/0[bB][01]+(?:_[01]+)*n?/.source+"|"+/0[oO][0-7]+(?:_[0-7]+)*n?/.source+"|"+/0[xX][\dA-Fa-f]+(?:_[\dA-Fa-f]+)*n?/.source+"|"+/\d+(?:_\d+)*n/.source+"|"+/(?:\d+(?:_\d+)*(?:\.(?:\d+(?:_\d+)*)?)?|\.\d+(?:_\d+)*)(?:[Ee][+-]?\d+(?:_\d+)*)?/.source+")"+/(?![\w$])/.source),lookbehind:!0},operator:/--|\+\+|\*\*=?|=>|&&=?|\|\|=?|[!=]==|<<=?|>>>?=?|[-+*/%&|^!=<>]=?|\.{3}|\?\?=?|\?\.?|[~:]/}),Prism.languages.javascript["class-name"][0].pattern=/(\b(?:class|extends|implements|instanceof|interface|new)\s+)[\w.\\]+/,Prism.languages.insertBefore("javascript","keyword",{regex:{pattern:RegExp(/((?:^|[^$\w\xA0-\uFFFF."'\])\s]|\b(?:return|yield))\s*)/.source+/\//.source+"(?:"+/(?:\[(?:[^\]\\\r\n]|\\.)*\]|\\.|[^/\\\[\r\n])+\/[dgimyus]{0,7}/.source+"|"+/(?:\[(?:[^[\]\\\r\n]|\\.|\[(?:[^[\]\\\r\n]|\\.|\[(?:[^[\]\\\r\n]|\\.)*\])*\])*\]|\\.|[^/\\\[\r\n])+\/[dgimyus]{0,7}v[dgimyus]{0,7}/.source+")"+/(?=(?:\s|\/\*(?:[^*]|\*(?!\/))*\*\/)*(?:$|[\r\n,.;:})\]]|\/\/))/.source),lookbehind:!0,greedy:!0,inside:{"regex-source":{pattern:/^(\/)[\s\S]+(?=\/[a-z]*$)/,lookbehind:!0,alias:"language-regex",inside:Prism.languages.regex},"regex-delimiter":/^\/|\/$/,"regex-flags":/^[a-z]+$/}},"function-variable":{pattern:/#?(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*[=:]\s*(?:async\s*)?(?:\bfunction\b|(?:\((?:[^()]|\([^()]*\))*\)|(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*)\s*=>))/,alias:"function"},parameter:[{pattern:/(function(?:\s+(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*)?\s*\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\))/,lookbehind:!0,inside:Prism.languages.javascript},{pattern:/(^|[^$\w\xA0-\uFFFF])(?!\s)[_$a-z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*=>)/i,lookbehind:!0,inside:Prism.languages.javascript},{pattern:/(\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\)\s*=>)/,lookbehind:!0,inside:Prism.languages.javascript},{pattern:/((?:\b|\s|^)(?!(?:as|async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|enum|export|extends|finally|for|from|function|get|if|implements|import|in|instanceof|interface|let|new|null|of|package|private|protected|public|return|set|static|super|switch|this|throw|try|typeof|undefined|var|void|while|with|yield)(?![$\w\xA0-\uFFFF]))(?:(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*\s*)\(\s*|\]\s*\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\)\s*\{)/,lookbehind:!0,inside:Prism.languages.javascript}],constant:/\b[A-Z](?:[A-Z_]|\dx?)*\b/}),Prism.languages.insertBefore("javascript","string",{hashbang:{pattern:/^#!.*/,greedy:!0,alias:"comment"},"template-string":{pattern:/`(?:\\[\s\S]|\$\{(?:[^{}]|\{(?:[^{}]|\{[^}]*\})*\})+\}|(?!\$\{)[^\\`])*`/,greedy:!0,inside:{"template-punctuation":{pattern:/^`|`$/,alias:"string"},interpolation:{pattern:/((?:^|[^\\])(?:\\{2})*)\$\{(?:[^{}]|\{(?:[^{}]|\{[^}]*\})*\})+\}/,lookbehind:!0,inside:{"interpolation-punctuation":{pattern:/^\$\{|\}$/,alias:"punctuation"},rest:Prism.languages.javascript}},string:/[\s\S]+/}},"string-property":{pattern:/((?:^|[,{])[ \t]*)(["'])(?:\\(?:\r\n|[\s\S])|(?!\2)[^\\\r\n])*\2(?=\s*:)/m,lookbehind:!0,greedy:!0,alias:"property"}}),Prism.languages.insertBefore("javascript","operator",{"literal-property":{pattern:/((?:^|[,{])[ \t]*)(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*:)/m,lookbehind:!0,alias:"property"}}),Prism.languages.markup&&(Prism.languages.markup.tag.addInlined("script","javascript"),Prism.languages.markup.tag.addAttribute(/on(?:abort|blur|change|click|composition(?:end|start|update)|dblclick|error|focus(?:in|out)?|key(?:down|up)|load|mouse(?:down|enter|leave|move|out|over|up)|reset|resize|scroll|select|slotchange|submit|unload|wheel)/.source,"javascript")),Prism.languages.js=Prism.languages.javascript,function(){var l,u,g,c,e;void 0!==Prism&&"undefined"!=typeof document&&(Element.prototype.matches||(Element.prototype.matches=Element.prototype.msMatchesSelector||Element.prototype.webkitMatchesSelector),l={js:"javascript",py:"python",rb:"ruby",ps1:"powershell",psm1:"powershell",sh:"bash",bat:"batch",h:"c",tex:"latex"},c="pre[data-src]:not(["+(u="data-src-status")+'="loaded"]):not(['+u+'="'+(g="loading")+'"])',Prism.hooks.add("before-highlightall",function(e){e.selector+=", "+c}),Prism.hooks.add("before-sanity-check",function(e){var r,t,n,a,s,i,o=e.element;o.matches(c)&&(e.code="",o.setAttribute(u,g),(r=o.appendChild(document.createElement("CODE"))).textContent="Loading…",t=o.getAttribute("data-src"),"none"===(e=e.language)&&(n=(/\.(\w+)$/.exec(t)||[,"none"])[1],e=l[n]||n),Prism.util.setLanguage(r,e),Prism.util.setLanguage(o,e),(n=Prism.plugins.autoloader)&&n.loadLanguages(e),n=t,a=function(e){o.setAttribute(u,"loaded");var t,n,a=function(e){var t,n;if(e=/^\s*(\d+)\s*(?:(,)\s*(?:(\d+)\s*)?)?$/.exec(e||""))return t=Number(e[1]),n=e[2],e=e[3],n?e?[t,Number(e)]:[t,void 0]:[t,t]}(o.getAttribute("data-range"));a&&(t=e.split(/\r\n?|\n/g),n=a[0],a=null==a[1]?t.length:a[1],n<0&&(n+=t.length),n=Math.max(0,Math.min(n-1,t.length)),a<0&&(a+=t.length),a=Math.max(0,Math.min(a,t.length)),e=t.slice(n,a).join("\n"),o.hasAttribute("data-start")||o.setAttribute("data-start",String(n+1))),r.textContent=e,Prism.highlightElement(r)},s=function(e){o.setAttribute(u,"failed"),r.textContent=e},(i=new XMLHttpRequest).open("GET",n,!0),i.onreadystatechange=function(){4==i.readyState&&(i.status<400&&i.responseText?a(i.responseText):400<=i.status?s("✖ Error "+i.status+" while fetching file: "+i.statusText):s("✖ Error: File does not exist or is empty"))},i.send(null))}),e=!(Prism.plugins.fileHighlight={highlight:function(e){for(var t,n=(e||document).querySelectorAll(c),a=0;t=n[a++];)Prism.highlightElement(t)}}),Prism.fileHighlight=function(){e||(console.warn("Prism.fileHighlight is deprecated. Use `Prism.plugins.fileHighlight.highlight` instead."),e=!0),Prism.plugins.fileHighlight.highlight.apply(this,arguments)})}();
-    !function(e){var t="\\b(?:BASH|BASHOPTS|BASH_ALIASES|BASH_ARGC|BASH_ARGV|BASH_CMDS|BASH_COMPLETION_COMPAT_DIR|BASH_LINENO|BASH_REMATCH|BASH_SOURCE|BASH_VERSINFO|BASH_VERSION|COLORTERM|COLUMNS|COMP_WORDBREAKS|DBUS_SESSION_BUS_ADDRESS|DEFAULTS_PATH|DESKTOP_SESSION|DIRSTACK|DISPLAY|EUID|GDMSESSION|GDM_LANG|GNOME_KEYRING_CONTROL|GNOME_KEYRING_PID|GPG_AGENT_INFO|GROUPS|HISTCONTROL|HISTFILE|HISTFILESIZE|HISTSIZE|HOME|HOSTNAME|HOSTTYPE|IFS|INSTANCE|JOB|LANG|LANGUAGE|LC_ADDRESS|LC_ALL|LC_IDENTIFICATION|LC_MEASUREMENT|LC_MONETARY|LC_NAME|LC_NUMERIC|LC_PAPER|LC_TELEPHONE|LC_TIME|LESSCLOSE|LESSOPEN|LINES|LOGNAME|LS_COLORS|MACHTYPE|MAILCHECK|MANDATORY_PATH|NO_AT_BRIDGE|OLDPWD|OPTERR|OPTIND|ORBIT_SOCKETDIR|OSTYPE|PAPERSIZE|PATH|PIPESTATUS|PPID|PS1|PS2|PS3|PS4|PWD|RANDOM|REPLY|SECONDS|SELINUX_INIT|SESSION|SESSIONTYPE|SESSION_MANAGER|SHELL|SHELLOPTS|SHLVL|SSH_AUTH_SOCK|TERM|UID|UPSTART_EVENTS|UPSTART_INSTANCE|UPSTART_JOB|UPSTART_SESSION|USER|WINDOWID|XAUTHORITY|XDG_CONFIG_DIRS|XDG_CURRENT_DESKTOP|XDG_DATA_DIRS|XDG_GREETER_DATA_DIR|XDG_MENU_PREFIX|XDG_RUNTIME_DIR|XDG_SEAT|XDG_SEAT_PATH|XDG_SESSION_DESKTOP|XDG_SESSION_ID|XDG_SESSION_PATH|XDG_SESSION_TYPE|XDG_VTNR|XMODIFIERS)\\b",a={pattern:/(^(["']?)\w+\2)[ \t]+\S.*/,lookbehind:!0,alias:"punctuation",inside:null},n={bash:a,environment:{pattern:RegExp("\\$"+t),alias:"constant"},variable:[{pattern:/\$?\(\([\s\S]+?\)\)/,greedy:!0,inside:{variable:[{pattern:/(^\$\(\([\s\S]+)\)\)/,lookbehind:!0},/^\$\(\(/],number:/\b0x[\dA-Fa-f]+\b|(?:\b\d+(?:\.\d*)?|\B\.\d+)(?:[Ee]-?\d+)?/,operator:/--|\+\+|\*\*=?|<<=?|>>=?|&&|\|\||[=!+\-*/%<>^&|]=?|[?~:]/,punctuation:/\(\(?|\)\)?|,|;/}},{pattern:/\$\((?:\([^)]+\)|[^()])+\)|`[^`]+`/,greedy:!0,inside:{variable:/^\$\(|^`|\)$|`$/}},{pattern:/\$\{[^}]+\}/,greedy:!0,inside:{operator:/:[-=?+]?|[!\/]|##?|%%?|\^\^?|,,?/,punctuation:/[\[\]]/,environment:{pattern:RegExp("(\\{)"+t),lookbehind:!0,alias:"constant"}}},/\$(?:\w+|[#?*!@$])/],entity:/\\(?:[abceEfnrtv\\"]|O?[0-7]{1,3}|U[0-9a-fA-F]{8}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{1,2})/};e.languages.bash={shebang:{pattern:/^#!\s*\/.*/,alias:"important"},comment:{pattern:/(^|[^"{\\$])#.*/,lookbehind:!0},"function-name":[{pattern:/(\bfunction\s+)[\w-]+(?=(?:\s*\(?:\s*\))?\s*\{)/,lookbehind:!0,alias:"function"},{pattern:/\b[\w-]+(?=\s*\(\s*\)\s*\{)/,alias:"function"}],"for-or-select":{pattern:/(\b(?:for|select)\s+)\w+(?=\s+in\s)/,alias:"variable",lookbehind:!0},"assign-left":{pattern:/(^|[\s;|&]|[<>]\()\w+(?:\.\w+)*(?=\+?=)/,inside:{environment:{pattern:RegExp("(^|[\\s;|&]|[<>]\\()"+t),lookbehind:!0,alias:"constant"}},alias:"variable",lookbehind:!0},parameter:{pattern:/(^|\s)-{1,2}(?:\w+:[+-]?)?\w+(?:\.\w+)*(?=[=\s]|$)/,alias:"variable",lookbehind:!0},string:[{pattern:/((?:^|[^<])<<-?\s*)(\w+)\s[\s\S]*?(?:\r?\n|\r)\2/,lookbehind:!0,greedy:!0,inside:n},{pattern:/((?:^|[^<])<<-?\s*)(["'])(\w+)\2\s[\s\S]*?(?:\r?\n|\r)\3/,lookbehind:!0,greedy:!0,inside:{bash:a}},{pattern:/(^|[^\\](?:\\\\)*)"(?:\\[\s\S]|\$\([^)]+\)|\$(?!\()|`[^`]+`|[^"\\`$])*"/,lookbehind:!0,greedy:!0,inside:n},{pattern:/(^|[^$\\])'[^']*'/,lookbehind:!0,greedy:!0},{pattern:/\$'(?:[^'\\]|\\[\s\S])*'/,greedy:!0,inside:{entity:n.entity}}],environment:{pattern:RegExp("\\$?"+t),alias:"constant"},variable:n.variable,function:{pattern:/(^|[\s;|&]|[<>]\()(?:add|apropos|apt|apt-cache|apt-get|aptitude|aspell|automysqlbackup|awk|basename|bash|bc|bconsole|bg|bzip2|cal|cargo|cat|cfdisk|chgrp|chkconfig|chmod|chown|chroot|cksum|clear|cmp|column|comm|composer|cp|cron|crontab|csplit|curl|cut|date|dc|dd|ddrescue|debootstrap|df|diff|diff3|dig|dir|dircolors|dirname|dirs|dmesg|docker|docker-compose|du|egrep|eject|env|ethtool|expand|expect|expr|fdformat|fdisk|fg|fgrep|file|find|fmt|fold|format|free|fsck|ftp|fuser|gawk|git|gparted|grep|groupadd|groupdel|groupmod|groups|grub-mkconfig|gzip|halt|head|hg|history|host|hostname|htop|iconv|id|ifconfig|ifdown|ifup|import|install|ip|java|jobs|join|kill|killall|less|link|ln|locate|logname|logrotate|look|lpc|lpr|lprint|lprintd|lprintq|lprm|ls|lsof|lynx|make|man|mc|mdadm|mkconfig|mkdir|mke2fs|mkfifo|mkfs|mkisofs|mknod|mkswap|mmv|more|most|mount|mtools|mtr|mutt|mv|nano|nc|netstat|nice|nl|node|nohup|notify-send|npm|nslookup|op|open|parted|passwd|paste|pathchk|ping|pkill|pnpm|podman|podman-compose|popd|pr|printcap|printenv|ps|pushd|pv|quota|quotacheck|quotactl|ram|rar|rcp|reboot|remsync|rename|renice|rev|rm|rmdir|rpm|rsync|scp|screen|sdiff|sed|sendmail|seq|service|sftp|sh|shellcheck|shuf|shutdown|sleep|slocate|sort|split|ssh|stat|strace|su|sudo|sum|suspend|swapon|sync|sysctl|tac|tail|tar|tee|time|timeout|top|touch|tr|traceroute|tsort|tty|umount|uname|unexpand|uniq|units|unrar|unshar|unzip|update-grub|uptime|useradd|userdel|usermod|users|uudecode|uuencode|v|vcpkg|vdir|vi|vim|virsh|vmstat|wait|watch|wc|wget|whereis|which|who|whoami|write|xargs|xdg-open|yarn|yes|zenity|zip|zsh|zypper)(?=$|[)\s;|&])/,lookbehind:!0},keyword:{pattern:/(^|[\s;|&]|[<>]\()(?:case|do|done|elif|else|esac|fi|for|function|if|in|select|then|until|while)(?=$|[)\s;|&])/,lookbehind:!0},builtin:{pattern:/(^|[\s;|&]|[<>]\()(?:\.|:|alias|bind|break|builtin|caller|cd|command|continue|declare|echo|enable|eval|exec|exit|export|getopts|hash|help|let|local|logout|mapfile|printf|pwd|read|readarray|readonly|return|set|shift|shopt|source|test|times|trap|type|typeset|ulimit|umask|unalias|unset)(?=$|[)\s;|&])/,lookbehind:!0,alias:"class-name"},boolean:{pattern:/(^|[\s;|&]|[<>]\()(?:false|true)(?=$|[)\s;|&])/,lookbehind:!0},"file-descriptor":{pattern:/\B&\d\b/,alias:"important"},operator:{pattern:/\d?<>|>\||\+=|=[=~]?|!=?|<<[<-]?|[&\d]?>>|\d[<>]&?|[<>][&=]?|&[>&]?|\|[&|]?/,inside:{"file-descriptor":{pattern:/^\d/,alias:"important"}}},punctuation:/\$?\(\(?|\)\)?|\.\.|[{}[\];\\]/,number:{pattern:/(^|\s)(?:[1-9]\d*|0)(?:[.,]\d+)?\b/,lookbehind:!0}},a.inside=e.languages.bash;for(var s=["comment","function-name","for-or-select","assign-left","parameter","string","environment","function","keyword","builtin","boolean","file-descriptor","operator","punctuation","number"],o=n.variable[1].inside,i=0;i<s.length;i++)o[s[i]]=e.languages.bash[s[i]];e.languages.sh=e.languages.bash,e.languages.shell=e.languages.bash}(Prism);
-  </script>
-
-  <!-- 交互逻辑 -->
-  <script>
-    // 1. 主题切换逻辑
-    const themeToggle = document.getElementById('themeToggle');
-    const sunIcon = themeToggle.querySelector('.sun-icon');
-    const moonIcon = themeToggle.querySelector('.moon-icon');
-    const htmlEl = document.documentElement;
-
-    function getPreferredTheme() {
-      const savedTheme = localStorage.getItem('theme');
-      if (savedTheme) return savedTheme;
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-
-    function applyTheme(theme) {
-      if (theme === 'dark') {
-        htmlEl.classList.add('dark-theme');
-        htmlEl.classList.remove('light-theme');
-        sunIcon.style.display = 'block';
-        moonIcon.style.display = 'none';
-      } else {
-        htmlEl.classList.add('light-theme');
-        htmlEl.classList.remove('dark-theme');
-        sunIcon.style.display = 'none';
-        moonIcon.style.display = 'block';
-      }
-      localStorage.setItem('theme', theme);
-    }
-
-    // 初始化主题
-    applyTheme(getPreferredTheme());
-
-    themeToggle.addEventListener('click', () => {
-      const isDark = htmlEl.classList.contains('dark-theme') || 
-                     (!htmlEl.classList.contains('light-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      applyTheme(isDark ? 'light' : 'dark');
-    });
-
-    // 2. 移动端侧边栏菜单控制
-    const sidebar = document.getElementById('sidebar');
-    const menuToggle = document.getElementById('menuToggle');
-    const sidebarOverlay = document.getElementById('sidebarOverlay');
-
-    function toggleSidebar() {
-      sidebar.classList.toggle('open');
-      sidebarOverlay.classList.toggle('show');
-    }
-
-    menuToggle.addEventListener('click', toggleSidebar);
-    sidebarOverlay.addEventListener('click', toggleSidebar);
-
-    // 点击侧边栏链接后自动收起侧边栏 (移动端)
-    const tocLinks = document.querySelectorAll('.toc-list a');
-    tocLinks.forEach(link => {
-      link.addEventListener('click', () => {
-        if (sidebar.classList.contains('open')) {
-          toggleSidebar();
-        }
-      });
-    });
-
-    // 3. 代码一键复制功能
-    document.querySelectorAll('.copy-button').forEach(button => {
-      button.addEventListener('click', () => {
-        const wrapper = button.closest('.code-block-wrapper');
-        const codeEl = wrapper.querySelector('pre code');
-        const textToCopy = codeEl.textContent;
-
-        navigator.clipboard.writeText(textToCopy).then(() => {
-          button.classList.add('copied');
-          const copyTextSpan = button.querySelector('.copy-text');
-          copyTextSpan.textContent = '已复制!';
-          
-          setTimeout(() => {
-            button.classList.remove('copied');
-            copyTextSpan.textContent = '复制';
-          }, 2000);
-        }).catch(err => {
-          console.error('复制失败: ', err);
-        });
-      });
-    });
-
-    // 4. 目录滚动监听高亮 (Scrollspy)
-    const headings = Array.from(document.querySelectorAll('.markdown-body h2, .markdown-body h3'));
-    const tocItems = Array.from(document.querySelectorAll('.toc-list li'));
-
-    function updateActiveToc() {
-      const scrollPosition = window.scrollY + 100; // 偏移量
-
-      // 找到当前处于视口或视口上方的最底部的标题
-      let activeHeading = null;
-      for (let i = headings.length - 1; i >= 0; i--) {
-        if (headings[i].offsetTop <= scrollPosition) {
-          activeHeading = headings[i];
-          break;
-        }
-      }
-
-      tocItems.forEach(item => item.classList.remove('active'));
-
-      if (activeHeading) {
-        const activeId = activeHeading.getAttribute('id');
-        const activeLink = document.querySelector(`.toc-list a[href="#${activeId}"]`);
-        if (activeLink) {
-          const activeItem = activeLink.parentElement;
-          activeItem.classList.add('active');
-          
-          // 如果是 H3，也高亮它所属的 H2 吗？可以通过平铺式各自高亮
-          // 确保激活项可见
-          const sidebarNav = document.querySelector('.sidebar-nav');
-          const activeItemTop = activeItem.offsetTop;
-          const activeItemHeight = activeItem.offsetHeight;
-          const sidebarScrollTop = sidebarNav.scrollTop;
-          const sidebarHeight = sidebarNav.offsetHeight;
-
-          if (activeItemTop < sidebarScrollTop) {
-            sidebarNav.scrollTop = activeItemTop - 20;
-          } else if (activeItemTop + activeItemHeight > sidebarScrollTop + sidebarHeight) {
-            sidebarNav.scrollTop = activeItemTop + activeItemHeight - sidebarHeight + 20;
-          }
-        }
-      }
-    }
-
-    window.addEventListener('scroll', updateActiveToc);
-    updateActiveToc(); // 页面加载时执行一次
-  </script>
 </body>
 </html>
