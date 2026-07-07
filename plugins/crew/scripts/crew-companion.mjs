@@ -83,6 +83,10 @@ function parseArgs(argv) {
     }
     i++;
   }
+  // --task-stdin：从 stdin 读任务文本（heredoc 传入，避免多行文本被 shell 换行截断）
+  if (opts["task-stdin"] && !opts.task) {
+    try { opts.task = fs.readFileSync(0, "utf8").trim(); } catch {}
+  }
   return { cmd, opts };
 }
 
@@ -136,6 +140,7 @@ function parseEvents(cli, text) {
   let finalText = "";
   let sessionId = null;
   let cost = null;
+  let stopReason = null;
   const push = (s) => {
     if (s && s.trim()) activities.push(s.replace(/\s+/g, " ").trim().slice(0, 120));
   };
@@ -149,6 +154,7 @@ function parseEvents(cli, text) {
       else if (e.type === "text") answer += e.data || "";
       else {
         if (e.sessionId) sessionId = e.sessionId;
+        if (e.type === "end" && e.stopReason) stopReason = e.stopReason;
         const c = e.usage?.cost?.total ?? e.usage?.cost;
         if (typeof c === "number" && c > 0) cost = (cost || 0) + c;
         push(`[${e.type}] ${JSON.stringify(e).slice(0, 100)}`);
@@ -188,7 +194,19 @@ function parseEvents(cli, text) {
     for (const l of lines.slice(-10)) push(l);
   }
   if (cost != null) push(`成本: $${cost.toFixed(4)}`);
-  return { activities, finalText: finalText.trim(), sessionId, cost };
+  return { activities, finalText: finalText.trim(), sessionId, cost, stopReason };
+}
+
+// 已知故障模式 → 给用户的修复提示
+function diagnose(logText) {
+  const hints = [];
+  if (/authentication failed/i.test(logText)) {
+    hints.push("agy 会话过期：在终端交互式跑一次 agy 完成登录即可恢复");
+  }
+  if (/ConnectionRefused.*mcp|Transport channel closed/i.test(logText)) {
+    hints.push("有 MCP server 连不上（grok 会继承 ~/.claude.json 的 mcpServers，如 xiaohongshu-mcp@18060）。该错误多数情况不影响任务，但偶发导致回合被取消；重试一次，或先启动对应 MCP 服务");
+  }
+  return hints;
 }
 
 // 从日志中提取并回写会话 id
@@ -240,16 +258,26 @@ async function runJob(fields, { background }) {
       console.log(log || "（无输出）");
     }
     console.log(`[crew] 任务 ${j.id} ${j.status}，追问用 /crew:send ${j.id} -- <消息>。`);
+    if (j.failReason) console.log(`[crew] ⚠️ ${j.failReason}`);
+    for (const h of j.status !== "done" || j.failReason ? diagnose(log) : []) console.log(`[crew] 提示：${h}`);
     if (j.worktree) console.log(`[crew] 改动在隔离 worktree：${j.worktree}（确认后自行合并，清理用 git worktree remove）`);
     process.exit(j.status === "done" ? (j.exitCode ?? 0) : 1);
   }
 }
 
-// 任务收尾：提取会话 id 回写状态、记账、桌面通知（在 worker 里执行）
+// 任务收尾：识别假成功、提取会话 id 回写状态、记账、桌面通知（在 worker 里执行）
 function finalizeJob(job) {
   try {
     const log = fs.existsSync(job.logFile) ? fs.readFileSync(job.logFile, "utf8") : "";
     const parsed = parseEvents(job.stream ? job.cli : "_plain", log);
+    // 假成功识别：退出码 0 但回合被取消/出错，或委派任务没有任何最终产出
+    if (job.status === "done" && parsed.stopReason && !/^(EndTurn|stop|end_turn)$/i.test(parsed.stopReason)) {
+      job.status = "failed";
+      job.failReason = `回合被终止（stopReason: ${parsed.stopReason}），任务可能没有真正执行`;
+    } else if (job.status === "done" && job.stream && !parsed.finalText) {
+      job.failReason = "没有解析到最终回答，结果存疑，建议核对";
+    }
+    if (job.failReason) writeJson(jobFile(job.id), job);
     if (parsed.sessionId) {
       job.sessionId = parsed.sessionId;
       writeJson(jobFile(job.id), job);
@@ -292,7 +320,7 @@ function cmdRun(opts) {
   const cli = opts.cli;
   if (!CLIS.includes(cli)) fail(`--cli 必须是 ${CLIS.join("/")} 之一`);
   if (!binaryAvailable(cli)) fail(`${cli} 未安装或不在 PATH，先运行 /crew:setup`);
-  if (!opts.task) fail("缺少任务文本（放在 -- 之后）");
+  if (!opts.task) fail("缺少任务文本（用 --task-stdin 从 heredoc 传入，或放在 -- 之后）");
 
   const launchCwd = opts.cwd ? path.resolve(opts.cwd) : process.cwd();
   if (opts.cwd && !fs.existsSync(launchCwd)) fail(`--cwd 目录不存在：${launchCwd}`);
@@ -398,6 +426,8 @@ function cmdResult(idArg) {
   } else {
     console.log(log || "（暂无输出）");
   }
+  if (job.failReason) console.log(`[crew] ⚠️ ${job.failReason}`);
+  if (job.status !== "done" || job.failReason) for (const h of diagnose(log)) console.log(`[crew] 提示：${h}`);
   if (job.status === "running") console.log("\n[crew] 任务仍在运行，用 /crew:progress 看它正在干嘛。");
 }
 
@@ -416,6 +446,8 @@ function cmdProgress(idArg) {
   const recent = parsed.activities.slice(-12);
   console.log(recent.length ? "\n最近活动：" : "\n（还没有活动输出）");
   for (const a of recent) console.log(`  ${a}`);
+  if (job.failReason) console.log(`\n[crew] ⚠️ ${job.failReason}`);
+  if (job.status !== "done" || job.failReason) for (const h of diagnose(log)) console.log(`[crew] 提示：${h}`);
   if (job.status === "running") console.log("\n[crew] 仍在运行，再次 /crew:progress 可刷新。");
 }
 

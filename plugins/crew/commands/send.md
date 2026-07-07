@@ -4,10 +4,12 @@ argument-hint: "[task-id] [--background] <follow-up message>"
 allowed-tools: Bash(node:*)
 ---
 
-Run (task-id is optional — defaults to the most recent task; the follow-up message goes after `--`):
+Run (task-id is optional — defaults to the most recent task; the follow-up message goes inside the heredoc):
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/crew-companion.mjs" send [task-id] [--background] -- <follow-up message>
+node "${CLAUDE_PLUGIN_ROOT}/scripts/crew-companion.mjs" send [task-id] [--background] --task-stdin <<'CREW_TASK'
+<follow-up message>
+CREW_TASK
 ```
 
 Return the output verbatim. Notes:
