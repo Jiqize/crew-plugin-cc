@@ -98,8 +98,9 @@ function buildArgv(cli, { review, resume, sessionId, model, task, stream }) {
     : task;
   switch (cli) {
     case "omp":
+      // 显式 --auto-approve：不依赖各机器的 approvalMode 配置（always-ask 会让无头模式挂死）
       return [
-        "omp", "-p",
+        "omp", "-p", "--auto-approve",
         ...(stream ? ["--mode", "json"] : []),
         ...(resume ? (sessionId ? ["-r", sessionId] : ["-c"]) : []),
         ...(model ? ["--model", model] : []),
@@ -116,10 +117,13 @@ function buildArgv(cli, { review, resume, sessionId, model, task, stream }) {
         ...(model ? ["--model", model] : [])
       ];
     case "agy":
+      // --new-project 必须加：agy 的 print 模式默认跑在"上次活跃项目"目录而非 cwd（实测跑错仓库）。
+      // review 也要 skip-permissions：否则命令被静默拒绝后 agy 会编造答案；只读靠 prompt 前缀约束。
+      // 注意 --new-project 与 --continue 互斥，续跑时不加。
       return [
         "agy", "-p", t, "--print-timeout", "30m",
-        ...(review ? [] : ["--dangerously-skip-permissions"]),
-        ...(resume ? ["--continue"] : []),
+        "--dangerously-skip-permissions",
+        ...(resume ? ["--continue"] : ["--new-project"]),
         ...(model ? ["--model", model] : [])
       ];
     case "opencode":
