@@ -76,7 +76,7 @@ function parseArgs(argv) {
     }
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      if (key === "cli" || key === "model" || key === "cwd" || key === "agent") opts[key] = rest[++i];
+      if (key === "cli" || key === "model" || key === "cwd" || key === "agent" || key === "squad" || key === "run") opts[key] = rest[++i];
       else if (key === "reasoning-effort") opts.reasoningEffort = rest[++i];
       else if (key === "rules") opts.rules = rest[++i];
       else if (key === "system-prompt-override") opts.systemPromptOverride = rest[++i];
@@ -268,7 +268,7 @@ async function runJob(fields, { background }) {
     ...fields
   };
   writeJson(jobFile(job.id), job);
-  emitMulticrew(job, ["create", "--id", job.id, "--title", job.task.slice(0, 80), "--executor", job.cli, ...(job.agent ? ["--agent", job.agent] : []), "--start"]);
+  emitMulticrew(job, ["create", "--id", job.id, "--title", job.task.slice(0, 80), "--executor", job.cli, ...(job.agent ? ["--agent", job.agent] : []), ...(job.squad ? ["--squad", job.squad, "--run", job.squadRun] : []), "--start"]);
   // 派发留痕：CLI 进程启动之前落 dispatched 审计事件（best-effort，同 emitMulticrew 语义）
   emitMulticrew(job, [
     "dispatch", job.id, "--cli", job.cli,
@@ -400,7 +400,33 @@ function resolveAgentPreset(id) {
   return parsed;
 }
 
+// --squad 预设解析：镜像 resolveAgentPreset 的失败语义（显式引用必须生效）。
+// 只做存在性与状态校验，squad 内容不注入任务文本。
+function resolveSquadPreset(id) {
+  let r;
+  try {
+    r = spawnSync("multicrew", ["squad", "show", id, "--json"], { encoding: "utf8" });
+  } catch (e) {
+    fail(`multicrew 调用失败（squad ${id}）：${e.message}`);
+  }
+  if (r.error) fail(`multicrew 未安装或不可执行（--squad 需要 multicrew）：${r.error.message}`);
+  let parsed;
+  try {
+    parsed = JSON.parse(r.stdout);
+  } catch {
+    fail(`multicrew squad show ${id} 输出无法解析：${(r.stdout || r.stderr || "").trim().slice(0, 200)}`);
+  }
+  if (r.status !== 0 || parsed.error) {
+    fail(`squad ${id} 解析失败：${parsed?.error?.message || (r.stderr || "").trim() || `exit ${r.status}`}`);
+  }
+  return parsed;
+}
+
 function cmdRun(opts) {
+  // squad 归组：run id 由编排者铸造，crew 不代铸
+  if (opts.squad && !opts.run) fail("--squad 需要显式 --run <rid>（run id 由编排者铸造，可先 multicrew task create --squad 获取）");
+  if (opts.run && !opts.squad) fail("--run 需要 --squad");
+  if (opts.squad) resolveSquadPreset(opts.squad);
   // 预设缺省值合并：命令行显式旗标优先于预设
   const preset = opts.agent ? resolveAgentPreset(opts.agent) : null;
   const cli = opts.cli || preset?.cli;
@@ -450,6 +476,7 @@ function cmdRun(opts) {
     ...(model ? { model } : {}),
     ...(reasoningEffort ? { reasoningEffort } : {}),
     repoKey: key,
+    ...(opts.squad ? { squad: opts.squad, squadRun: opts.run } : {}),
     ...(preset ? { agent: preset.id, agentInstructions: preset.instructions, agentHash: redacted.agentHash } : {})
   }, { background: !!opts.background });
 }

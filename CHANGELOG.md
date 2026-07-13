@@ -4,6 +4,18 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.10.0] - 2026-07-13
+
+### 新增
+- `crew-companion run --squad <id> --run <rid>`：把派发的任务归入 multicrew squad run。created 事件追加 `--squad/--run` 透传（`multicrew ls --run <rid>`、`squad runs` 可按 run 聚合查看）；job 记录新增 `squad`/`squadRun` 字段。
+- `--squad` 必须搭配显式 `--run`（run id 由编排者铸造，crew 不代铸，可先 `multicrew task create --squad` 获取）；`--run` 必须搭配 `--squad`。
+- 派发前经 `multicrew squad show <id> --json` 校验 squad 预设存在且非 deprecated；校验失败报错退出、不建 job、不写任务事件（显式引用必须生效，同 `--agent` 语义）。squad 内容不注入任务文本。
+
+### 验证（真实派发，2026-07-13）
+- 临时项目内 `run --cli omp --squad demo.e2e.v1 --run sr-e2e001 -- 输出 ok` → 任务 done，`multicrew show <jobId> --json` 的 `.squad`=demo.e2e.v1、`.squadRun`=sr-e2e001；`ls --run sr-e2e001` 恰列该单。
+- `--squad nope.squad.v1` → `squad 解析失败：Squad preset "nope.squad.v1" not found.` 退出 1，账本零新增事件；缺 `--run` / 缺 `--squad` 各自报错退出 1。
+- 不带 `--squad` 最小派发 → created/dispatched/done 正常落账（cost 0），快照无 squad 键，与 0.9.1 行为一致。
+
 ## [0.9.1] - 2026-07-13
 
 ### 修复
