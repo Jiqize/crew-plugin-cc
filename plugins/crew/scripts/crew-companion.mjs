@@ -268,6 +268,16 @@ async function runJob(fields, { background }) {
   };
   writeJson(jobFile(job.id), job);
   emitMulticrew(job, ["create", "--id", job.id, "--title", job.task.slice(0, 80), "--executor", job.cli, ...(job.agent ? ["--agent", job.agent] : []), "--start"]);
+  // 派发留痕：CLI 进程启动之前落 dispatched 审计事件（best-effort，同 emitMulticrew 语义）
+  emitMulticrew(job, [
+    "dispatch", job.id, "--cli", job.cli,
+    "--argv-json", JSON.stringify(job.auditArgv ?? job.argv),
+    "--cwd", job.cwd, "--job-id", job.id,
+    ...(job.model ? ["--model", job.model] : []),
+    ...(job.reasoningEffort ? ["--reasoning-effort", job.reasoningEffort] : []),
+    ...(job.agent ? ["--agent", job.agent] : []),
+    ...(job.agentHash ? ["--agent-hash", job.agentHash] : [])
+  ]);
   const child = spawn(process.execPath, [SELF, "_exec", job.id], { detached: true, stdio: "ignore" });
   child.unref();
   if (background) {
@@ -358,6 +368,14 @@ function makeWorktree(cwd, id) {
   return dir;
 }
 
+// 审计引用替换：人设 instructions 全文 → 占位符（含内容哈希前 12 位与原文字符数）。
+// 凡包含 instructions 全文的 argv 元素（grok --rules 值、前缀注入后的 task 文本）统一被替换，task 原文照存。
+function redactArgv(argv, instructions) {
+  const hash12 = crypto.createHash("sha256").update(instructions, "utf8").digest("hex").slice(0, 12);
+  const placeholder = `[agent-instructions sha256:${hash12} ${instructions.length} chars]`;
+  return { agentHash: hash12, auditArgv: argv.map((el) => el.split(instructions).join(placeholder)) };
+}
+
 // --agent 预设解析：显式引用必须生效，任何失败都报错退出、不建 job、不写任务事件
 // （与 emitMulticrew 的静默吞错语义相反——那是隐式记账）
 function resolveAgentPreset(id) {
@@ -403,18 +421,23 @@ function cmdRun(opts) {
   const stream = cli !== "agy";
   // --resume 时优先用状态里记录的精确会话 id
   const prev = readJson(STATE_FILE, {})[key]?.[cli];
+  // 合并后的 model/reasoningEffort：显式旗标优先于预设（供 buildArgv 与审计落账共用）
+  const model = opts.model || preset?.model;
+  const reasoningEffort = opts.reasoningEffort || preset?.reasoning_effort;
   const argv = buildArgv(cli, {
     review: !!opts.review,
     resume: !!opts.resume,
     sessionId: opts.resume ? prev?.sessionId : undefined,
-    model: opts.model || preset?.model,
-    reasoningEffort: opts.reasoningEffort || preset?.reasoning_effort,
+    model,
+    reasoningEffort,
     rules: opts.rules,
     systemPromptOverride: opts.systemPromptOverride,
     task: opts.task,
     stream,
     agentInstructions: preset?.instructions
   });
+  // 审计视图：有预设时人设全文替换为引用占位符；原始 argv 不变供 _exec 执行
+  const redacted = preset ? redactArgv(argv, preset.instructions) : { auditArgv: argv };
   markSession(launchCwd, cli, opts.task);
   runJob({
     id, cli,
@@ -422,8 +445,11 @@ function cmdRun(opts) {
     task: opts.task.slice(0, 500),
     // launchCwd 供 multicrew 定位项目级 ledger：worktree 任务也用发起目录（看板在主仓库看）
     cwd, worktree, argv, stream, launchCwd,
+    auditArgv: redacted.auditArgv,
+    ...(model ? { model } : {}),
+    ...(reasoningEffort ? { reasoningEffort } : {}),
     repoKey: key,
-    ...(preset ? { agent: preset.id, agentInstructions: preset.instructions } : {})
+    ...(preset ? { agent: preset.id, agentInstructions: preset.instructions, agentHash: redacted.agentHash } : {})
   }, { background: !!opts.background });
 }
 

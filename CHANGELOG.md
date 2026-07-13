@@ -4,6 +4,13 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.0] - 2026-07-13
+
+### 新增
+- 派发留痕：每次派发在 CLI 进程启动之前，经 `multicrew task dispatch` 向项目级账本落一条 `dispatched` 审计事件（cli、model、reasoning-effort、agent、agentHash、完整 argv、cwd、jobId）。best-effort 语义同既有 emitMulticrew：multicrew 缺席/出错/`MULTICREW_DISABLE=1` 一律静默跳过，不阻断派发。覆盖全部派发路径（delegate 与 review、前台与后台，含 send 续跑单）。
+- 审计引用替换：argv 中注入的人设 instructions 全文（grok `--rules` 值、task 前缀注入文本）替换为占位符 `[agent-instructions sha256:<hash12> <N> chars]`，task 原文照存；`agentHash` 为 instructions sha256 hex 前 12 位，与占位符内哈希一致。
+- job 记录新增 `model`/`reasoningEffort`（合并后的生效值）、`agentHash`、`auditArgv`（引用替换后的 argv；原始 `argv` 不变供执行）。
+
 ## [0.8.0] - 2026-07-13
 
 ### 新增
