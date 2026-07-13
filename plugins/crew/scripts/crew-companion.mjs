@@ -178,7 +178,8 @@ function parseEvents(cli, text) {
         if (e.sessionId) sessionId = e.sessionId;
         if (e.type === "end" && e.stopReason) stopReason = e.stopReason;
         const c = e.usage?.cost?.total ?? e.usage?.cost;
-        if (typeof c === "number" && c > 0) cost = (cost || 0) + c;
+        if (typeof c === "number") cost = (cost || 0) + c;
+        else if (e.type === "end" && e.usage && cost == null) cost = 0; // 订阅制：end 有用量但全程无金额，按 $0 入账（同 omp 口径）
         push(`[${e.type}] ${JSON.stringify(e).slice(0, 100)}`);
       }
     }

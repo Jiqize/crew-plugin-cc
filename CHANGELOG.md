@@ -4,6 +4,11 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.1] - 2026-07-13
+
+### 修复
+- grok 成本采集：grok CLI（订阅制 OIDC 登录）事件流只报 token 用量、不含金额，此前成本一律记 unknown。现在 `end` 事件带 usage 但全程无 cost 字段时按 $0 入账（与 omp「订阅制 provider 报 0 也是合法成本」口径一致）；若未来 grok 事件流开始报金额，数值解析优先生效（含 0 也如实累加，不再要求 >0）。
+
 ## [0.9.0] - 2026-07-13
 
 ### 新增
