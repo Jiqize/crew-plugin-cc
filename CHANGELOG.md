@@ -4,6 +4,14 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.8.0] - 2026-07-13
+
+### 新增
+- `crew-companion run --agent <id>`：引用 multicrew 用户级 agent 预设（`~/.multicrew/agents/*.md`）派发任务。派发前经 `multicrew agent show <id> --json` 解析预设；解析失败报错退出、不建 job、不写任务事件（显式引用必须生效，与看板记账的静默吞错语义相反）。
+- 预设的 `cli`/`model`/`reasoning_effort` 作为缺省值，命令行显式旗标优先。
+- 人设注入矩阵：grok 走 `--rules`（用户已显式给 `--rules` 时让位，改走 task 前缀）；omp/agy/opencode 走 task 前缀注入（omp 的 `--append-system-prompt` 实测内容可注入但行为约束不生效，弃用）。
+- job 记录新增 `agent`/`agentInstructions` 字段；multicrew created 事件带 `--agent <id>`（看板可见人设身份）。
+
 ## [0.7.0] - 2026-07-13
 
 ### 新增

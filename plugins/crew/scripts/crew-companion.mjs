@@ -76,7 +76,7 @@ function parseArgs(argv) {
     }
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      if (key === "cli" || key === "model" || key === "cwd") opts[key] = rest[++i];
+      if (key === "cli" || key === "model" || key === "cwd" || key === "agent") opts[key] = rest[++i];
       else if (key === "reasoning-effort") opts.reasoningEffort = rest[++i];
       else if (key === "rules") opts.rules = rest[++i];
       else if (key === "system-prompt-override") opts.systemPromptOverride = rest[++i];
@@ -95,10 +95,18 @@ function parseArgs(argv) {
 
 // 各 CLI 的无头调用映射（review 为只读语义）。
 // stream 打开各家的 JSON 事件流（供 progress/result 解析）；sessionId 用于精确续跑（omp/opencode 支持）。
-function buildArgv(cli, { review, resume, sessionId, model, task, stream, reasoningEffort, rules, systemPromptOverride }) {
-  const t = review
-    ? `Read-only review task. Do NOT modify, create, or delete any files.\n\n${task}`
+function buildArgv(cli, { review, resume, sessionId, model, task, stream, reasoningEffort, rules, systemPromptOverride, agentInstructions }) {
+  // 人设注入矩阵：grok 走 --rules（用户已显式给 --rules 时让位，改走 task 前缀）；
+  // omp/agy/opencode 恒走 task 前缀——omp 的 --append-system-prompt 实测内容可注入，
+  // 但追加在 ~44k 系统提示末尾行为约束不生效（2026-07-13 冒烟），故不用。
+  // review 只读前缀仍拼在最外层。
+  const personaViaFlag = cli === "grok" && !rules;
+  const withPersona = agentInstructions && !personaViaFlag
+    ? `# Agent persona (follow strictly)\n\n${agentInstructions}\n\n---\n\n# Task\n\n${task}`
     : task;
+  const t = review
+    ? `Read-only review task. Do NOT modify, create, or delete any files.\n\n${withPersona}`
+    : withPersona;
   switch (cli) {
     case "omp":
       // 显式 --auto-approve：不依赖各机器的 approvalMode 配置（always-ask 会让无头模式挂死）
@@ -121,7 +129,7 @@ function buildArgv(cli, { review, resume, sessionId, model, task, stream, reason
         ...(resume ? (sessionId ? ["-r", sessionId] : ["-c"]) : []),
         ...(model ? ["--model", model] : []),
         ...(eff ? ["--reasoning-effort", eff] : []),
-        ...(rules ? ["--rules", rules] : []),
+        ...(rules ? ["--rules", rules] : agentInstructions ? ["--rules", agentInstructions] : []),
         ...(systemPromptOverride ? ["--system-prompt-override", systemPromptOverride] : [])
       ];
     case "agy":
@@ -259,7 +267,7 @@ async function runJob(fields, { background }) {
     ...fields
   };
   writeJson(jobFile(job.id), job);
-  emitMulticrew(job, ["create", "--id", job.id, "--title", job.task.slice(0, 80), "--executor", job.cli, "--start"]);
+  emitMulticrew(job, ["create", "--id", job.id, "--title", job.task.slice(0, 80), "--executor", job.cli, ...(job.agent ? ["--agent", job.agent] : []), "--start"]);
   const child = spawn(process.execPath, [SELF, "_exec", job.id], { detached: true, stdio: "ignore" });
   child.unref();
   if (background) {
@@ -350,8 +358,33 @@ function makeWorktree(cwd, id) {
   return dir;
 }
 
+// --agent 预设解析：显式引用必须生效，任何失败都报错退出、不建 job、不写任务事件
+// （与 emitMulticrew 的静默吞错语义相反——那是隐式记账）
+function resolveAgentPreset(id) {
+  let r;
+  try {
+    r = spawnSync("multicrew", ["agent", "show", id, "--json"], { encoding: "utf8" });
+  } catch (e) {
+    fail(`multicrew 调用失败（预设 ${id}）：${e.message}`);
+  }
+  if (r.error) fail(`multicrew 未安装或不可执行（--agent 需要 multicrew）：${r.error.message}`);
+  let parsed;
+  try {
+    parsed = JSON.parse(r.stdout);
+  } catch {
+    fail(`multicrew agent show ${id} 输出无法解析：${(r.stdout || r.stderr || "").trim().slice(0, 200)}`);
+  }
+  if (r.status !== 0 || parsed.error) {
+    fail(`预设 ${id} 解析失败：${parsed?.error?.message || (r.stderr || "").trim() || `exit ${r.status}`}`);
+  }
+  if (!parsed.instructions) fail(`预设 ${id} 没有 instructions 正文`);
+  return parsed;
+}
+
 function cmdRun(opts) {
-  const cli = opts.cli;
+  // 预设缺省值合并：命令行显式旗标优先于预设
+  const preset = opts.agent ? resolveAgentPreset(opts.agent) : null;
+  const cli = opts.cli || preset?.cli;
   if (!CLIS.includes(cli)) fail(`--cli 必须是 ${CLIS.join("/")} 之一`);
   if (!binaryAvailable(cli)) fail(`${cli} 未安装或不在 PATH，先运行 /crew:setup`);
   if (!opts.task) fail("缺少任务文本（用 --task-stdin 从 heredoc 传入，或放在 -- 之后）");
@@ -374,12 +407,13 @@ function cmdRun(opts) {
     review: !!opts.review,
     resume: !!opts.resume,
     sessionId: opts.resume ? prev?.sessionId : undefined,
-    model: opts.model,
-    reasoningEffort: opts.reasoningEffort,
+    model: opts.model || preset?.model,
+    reasoningEffort: opts.reasoningEffort || preset?.reasoning_effort,
     rules: opts.rules,
     systemPromptOverride: opts.systemPromptOverride,
     task: opts.task,
-    stream
+    stream,
+    agentInstructions: preset?.instructions
   });
   markSession(launchCwd, cli, opts.task);
   runJob({
@@ -388,7 +422,8 @@ function cmdRun(opts) {
     task: opts.task.slice(0, 500),
     // launchCwd 供 multicrew 定位项目级 ledger：worktree 任务也用发起目录（看板在主仓库看）
     cwd, worktree, argv, stream, launchCwd,
-    repoKey: key
+    repoKey: key,
+    ...(preset ? { agent: preset.id, agentInstructions: preset.instructions } : {})
   }, { background: !!opts.background });
 }
 
