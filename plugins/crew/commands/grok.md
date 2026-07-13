@@ -1,6 +1,6 @@
 ---
 description: Delegate a task to grok CLI in headless mode
-argument-hint: "[--background] [--resume|--fresh] [--worktree] [--model <model>] <task for grok>"
+argument-hint: "[--background] [--resume|--fresh] [--worktree] [--model <model>] [--reasoning-effort <effort>] [--rules <rules>] [--system-prompt-override <prompt>] <task for grok>"
 allowed-tools: Bash(node:*), AskUserQuestion, Agent
 ---
 
@@ -9,7 +9,8 @@ Invoke the `crew:crew-runner` subagent via the `Agent` tool (`subagent_type: "cr
 Raw user request:
 $ARGUMENTS
 
-Routing flags (`--background`, `--resume`, `--fresh`, `--worktree`, `--model`) are not task text — forward them to the runner as flags:
+Routing flags (`--background`, `--resume`, `--fresh`, `--worktree`, `--model`, `--reasoning-effort`, `--rules`, `--system-prompt-override`) are not task text — forward them to the runner as flags:
+写操作默认 `--reasoning-effort low`；`--review` 保持满推理不降档；显式传 `--reasoning-effort` 以用户值为准。
 
 - `--background` → run the subagent in the background (`run_in_background: true`); tell the user the task id line the companion prints.
 - If neither `--resume` nor `--fresh` is present, first run:

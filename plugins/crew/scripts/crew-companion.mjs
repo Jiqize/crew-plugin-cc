@@ -77,6 +77,9 @@ function parseArgs(argv) {
     if (a.startsWith("--")) {
       const key = a.slice(2);
       if (key === "cli" || key === "model" || key === "cwd") opts[key] = rest[++i];
+      else if (key === "reasoning-effort") opts.reasoningEffort = rest[++i];
+      else if (key === "rules") opts.rules = rest[++i];
+      else if (key === "system-prompt-override") opts.systemPromptOverride = rest[++i];
       else opts[key] = true;
     } else {
       opts._.push(a);
@@ -92,7 +95,7 @@ function parseArgs(argv) {
 
 // 各 CLI 的无头调用映射（review 为只读语义）。
 // stream 打开各家的 JSON 事件流（供 progress/result 解析）；sessionId 用于精确续跑（omp/opencode 支持）。
-function buildArgv(cli, { review, resume, sessionId, model, task, stream }) {
+function buildArgv(cli, { review, resume, sessionId, model, task, stream, reasoningEffort, rules, systemPromptOverride }) {
   const t = review
     ? `Read-only review task. Do NOT modify, create, or delete any files.\n\n${task}`
     : task;
@@ -109,12 +112,17 @@ function buildArgv(cli, { review, resume, sessionId, model, task, stream }) {
     case "grok":
       // delegate 必须 bypassPermissions：acceptEdits 只自动批文件编辑，终端命令会等审批，
       // 无头模式下约 60s 超时导致整个回合被 Cancelled（退出码仍为 0）
+      // reasoning-effort 优先级：用户显式 > review 保持满推理（不加） > 写操作默认 low
+      const eff = reasoningEffort || (!review ? "low" : "");
       return [
         "grok", "-p", t,
         "--permission-mode", review ? "plan" : "bypassPermissions",
         ...(stream ? ["--output-format", "streaming-json"] : []),
         ...(resume ? (sessionId ? ["-r", sessionId] : ["-c"]) : []),
-        ...(model ? ["--model", model] : [])
+        ...(model ? ["--model", model] : []),
+        ...(eff ? ["--reasoning-effort", eff] : []),
+        ...(rules ? ["--rules", rules] : []),
+        ...(systemPromptOverride ? ["--system-prompt-override", systemPromptOverride] : [])
       ];
     case "agy":
       // --new-project 必须加：agy 的 print 模式默认跑在"上次活跃项目"目录而非 cwd（实测跑错仓库）。
@@ -229,6 +237,16 @@ function captureSession(job) {
   return job;
 }
 
+// multicrew 看板集成：向项目级 .multicrew/events.jsonl 发事件。
+// 非侵入约定：multicrew 未安装/出错/被禁用（MULTICREW_DISABLE=1）一律静默跳过，绝不影响 crew 主流程。
+function emitMulticrew(job, args) {
+  if (process.env.MULTICREW_DISABLE === "1") return;
+  if (!job.launchCwd) return;
+  try {
+    spawnSync("multicrew", ["task", ...args, "--dir", job.launchCwd], { stdio: "ignore" });
+  } catch {}
+}
+
 // 创建任务记录并派生 worker。前台/后台统一走这里：每次运行都有任务 id，因此都能被 send 追问。
 // 前台模式轮询等待完成后渲染结果；即使本进程被杀（如 Bash 超时），worker 仍在后台继续，可用 /crew:result 取回。
 async function runJob(fields, { background }) {
@@ -241,6 +259,7 @@ async function runJob(fields, { background }) {
     ...fields
   };
   writeJson(jobFile(job.id), job);
+  emitMulticrew(job, ["create", "--id", job.id, "--title", job.task.slice(0, 80), "--executor", job.cli, "--start"]);
   const child = spawn(process.execPath, [SELF, "_exec", job.id], { detached: true, stdio: "ignore" });
   child.unref();
   if (background) {
@@ -256,6 +275,7 @@ async function runJob(fields, { background }) {
     if (j.status === "running" && j.workerPid && !isAlive(j.workerPid)) {
       j.status = "interrupted";
       writeJson(jobFile(job.id), j);
+      emitMulticrew(j, ["fail", j.id, "--reason", "worker process died (interrupted)"]);
     }
     if (j.status === "running") continue;
     const log = fs.existsSync(j.logFile) ? fs.readFileSync(j.logFile, "utf8").trim() : "";
@@ -287,6 +307,11 @@ function finalizeJob(job) {
       job.failReason = "没有解析到最终回答，结果存疑，建议核对";
     }
     if (job.failReason) writeJson(jobFile(job.id), job);
+    // 回写解析成本（供 multicrew done --cost 与状态记录使用），非数值不写
+    if (typeof parsed.cost === "number") {
+      job.cost = parsed.cost;
+      writeJson(jobFile(job.id), job);
+    }
     if (parsed.sessionId) {
       job.sessionId = parsed.sessionId;
       writeJson(jobFile(job.id), job);
@@ -350,6 +375,9 @@ function cmdRun(opts) {
     resume: !!opts.resume,
     sessionId: opts.resume ? prev?.sessionId : undefined,
     model: opts.model,
+    reasoningEffort: opts.reasoningEffort,
+    rules: opts.rules,
+    systemPromptOverride: opts.systemPromptOverride,
     task: opts.task,
     stream
   });
@@ -358,7 +386,8 @@ function cmdRun(opts) {
     id, cli,
     mode: opts.review ? "review" : "delegate",
     task: opts.task.slice(0, 500),
-    cwd, worktree, argv, stream,
+    // launchCwd 供 multicrew 定位项目级 ledger：worktree 任务也用发起目录（看板在主仓库看）
+    cwd, worktree, argv, stream, launchCwd,
     repoKey: key
   }, { background: !!opts.background });
 }
@@ -374,12 +403,32 @@ function cmdExec(id) {
   const child = spawn(job.argv[0], job.argv.slice(1), { cwd: job.cwd, stdio: ["ignore", out, out] });
   job.cliPid = child.pid;
   writeJson(jf, job);
+  // 心跳：日志有增长才发 progress（size 单调递增保证语义 ID 不重复；无增长不发，配合看板 stalled 判定）
+  let lastLogSize = 0;
+  const heartbeat = setInterval(() => {
+    try {
+      const size = fs.statSync(job.logFile).size;
+      if (size > lastLogSize) {
+        lastLogSize = size;
+        emitMulticrew(job, ["log", job.id, `output grew to ${size}B`]);
+      }
+    } catch {}
+  }, 60000);
+  heartbeat.unref();
   child.on("exit", (code) => {
     job.status = code === 0 ? "done" : "failed";
     job.exitCode = code;
     job.endedAt = new Date().toISOString();
     writeJson(jf, job);
-    finalizeJob(job);
+    finalizeJob(job); // 可能把假成功改判 failed、回写 job.cost
+    if (job.status === "done") {
+      emitMulticrew(job, ["done", job.id, ...(typeof job.cost === "number" ? ["--cost", String(job.cost)] : [])]);
+    } else {
+      emitMulticrew(job, [
+        "fail", job.id, "--reason", job.failReason || `exit code ${code}`,
+        ...(Number.isInteger(code) ? ["--exit-code", String(code)] : [])
+      ]);
+    }
     process.exit(0);
   });
 }
@@ -474,6 +523,9 @@ function cmdSend(opts) {
     resume: true,
     sessionId: job.sessionId,
     model: opts.model,
+    reasoningEffort: opts.reasoningEffort,
+    rules: opts.rules,
+    systemPromptOverride: opts.systemPromptOverride,
     task: opts.task,
     stream
   });
@@ -529,6 +581,8 @@ function cmdCancel(idArg) {
   job.status = "canceled";
   job.endedAt = new Date().toISOString();
   writeJson(jobFile(job.id), job);
+  // 与 worker exit handler 的 fail 存在竞态属预期：账本以第一个终态为准，后到的被 TASK_ALREADY_TERMINAL 静默拒收
+  emitMulticrew(job, ["cancel", job.id]);
   console.log(`已取消 ${job.id}（${job.cli}）。`);
 }
 

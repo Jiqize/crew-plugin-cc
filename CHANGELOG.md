@@ -4,6 +4,13 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.7.0] - 2026-07-13
+
+### 新增
+- multicrew 看板集成：任务派发/结束/取消/中断自动写入项目级 `.multicrew/events.jsonl`（created+started、done 带成本、failed 带原因和退出码、cancelled），worker 每 60s 检测日志增长发心跳 progress。非侵入：multicrew 未安装、出错或 `MULTICREW_DISABLE=1` 时静默跳过，crew 主流程不受影响。
+- job 记录新增 `launchCwd`（定位项目级 ledger，worktree 任务也记发起目录）与 `cost`（finalizeJob 从事件流回写解析成本）。
+- grok 新增 `--reasoning-effort`/`--rules`/`--system-prompt-override` 透传；delegate 模式默认 `--reasoning-effort low`（review 保持满推理）。
+
 ## [0.6.0] - 2026-07-07
 
 ### 修复
