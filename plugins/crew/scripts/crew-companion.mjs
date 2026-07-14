@@ -15,7 +15,7 @@ const STATE_DIR = path.join(os.homedir(), ".crew");
 const JOBS_DIR = path.join(STATE_DIR, "jobs");
 const WT_DIR = path.join(STATE_DIR, "worktrees");
 const STATE_FILE = path.join(STATE_DIR, "state.json");
-const CLIS = ["omp", "grok", "agy", "opencode"];
+const CLIS = ["omp", "grok", "agy", "opencode", "codex"];
 
 function fail(msg) {
   console.error(`[crew] ${msg}`);
@@ -150,6 +150,20 @@ function buildArgv(cli, { review, resume, sessionId, model, task, stream, reason
         ...(resume ? (sessionId ? ["-s", sessionId] : ["-c"]) : []),
         ...(model ? ["-m", model] : [])
       ];
+    case "codex": {
+      // codex exec 无头模式：--json 事件流、免审批/sandbox、跳过 git 检查（非 git 目录也能派）。
+      // 续跑走子命令 `exec resume --last`（本轮不做 sessionId 精确续跑，够 send 追问用）。
+      // 人设走 task 前缀注入（同 omp/agy），review 只读前缀已拼在 t 里。--json 恒开（stream 判定 cli!=="agy" 已覆盖）。
+      const sub = resume ? ["exec", "resume", "--last"] : ["exec"];
+      return [
+        "codex", ...sub,
+        "--json",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--skip-git-repo-check",
+        ...(model ? ["-m", model] : []),
+        t
+      ];
+    }
     default:
       throw new Error(`unknown cli: ${cli}`);
   }
@@ -210,6 +224,25 @@ function parseEvents(cli, text) {
       if (e.type === "tool_use") push(`工具 ${p.tool || "?"}${p.state?.status ? ` (${p.state.status})` : ""}`);
       else if (e.type === "text") { finalText += (finalText ? "\n" : "") + (p.text || ""); push(`输出: ${p.text}`); }
       else if (e.type === "step_finish" && p.cost != null) cost = (cost || 0) + p.cost;
+    }
+  } else if (cli === "codex") {
+    // codex exec --json JSONL：thread.started 带会话 id；item.completed 里 agent_message.text 是回答、
+    // command_execution 是终端工具调用；turn.completed 有 token 用量但无金额（订阅制，按 $0 入账，同 grok/omp 口径）。
+    for (const l of lines) {
+      let e;
+      try { e = JSON.parse(l); } catch { continue; }
+      if (e.type === "thread.started" && e.thread_id) sessionId = e.thread_id;
+      else if (e.type === "turn.completed") {
+        if (e.usage && cost == null) cost = 0; // 有用量无金额 → $0
+      } else if (e.type === "turn.failed") {
+        stopReason = e.error?.message || "failed"; // 供 finalizeJob 识别假成功
+      } else if (e.type === "item.completed") {
+        const it = e.item || {};
+        if (it.type === "agent_message") { finalText = it.text || ""; push(`输出: ${it.text}`); }
+        else if (it.type === "command_execution") push(`命令 ${it.command} (${it.status})`);
+        else if (it.type === "reasoning") push(`思考: ${it.text ?? ""}`);
+        else if (it.type === "error") push(`错误: ${it.message}`);
+      }
     }
   } else {
     // agy 等无事件流的 CLI：原文即结果
