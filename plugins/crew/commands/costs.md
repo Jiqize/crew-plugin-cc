@@ -9,4 +9,4 @@ Run:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/crew-companion.mjs" costs
 ```
 
-Return the output verbatim. Note for the user if relevant: costs come from each CLI's own event stream (opencode/omp report cost per run; grok reports when its events include usage; agy does not report cost — those runs show as 成本未知).
+Return the output verbatim. Note for the user if relevant: costs come from each CLI's own event stream (opencode/omp report cost per run; grok reports when its events include usage; codex is subscription-based and reports $0; agy does not report cost — those runs show as 成本未知).

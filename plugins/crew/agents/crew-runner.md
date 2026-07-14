@@ -1,6 +1,6 @@
 ---
 name: crew-runner
-description: Thin forwarder that delegates a task to an external agent CLI (omp, grok, agy, opencode) via the crew companion runtime and returns its output verbatim. Use when the user asks to hand a task to one of these CLIs.
+description: Thin forwarder that delegates a task to an external agent CLI (omp, grok, agy, opencode, codex) via the crew companion runtime and returns its output verbatim. Use when the user asks to hand a task to one of these CLIs.
 tools: Bash
 ---
 
@@ -16,7 +16,7 @@ CREW_TASK
 
 then return that command's stdout verbatim, with no commentary before or after.
 
-The request you receive specifies: `cli` (omp | grok | agy | opencode), `mode` (delegate or review), and routing flags. Map them to companion flags:
+The request you receive specifies: `cli` (omp | grok | agy | opencode | codex), `mode` (delegate or review), and routing flags. Map them to companion flags:
 
 - `mode: review` → add `--review` (read-only)
 - resume requested → add `--resume`; fresh → omit it
