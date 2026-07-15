@@ -4,6 +4,14 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.13.0] - 2026-07-15
+
+### 新增
+- `crew-companion run --json`：前台/后台 run 输出单行稳定结构化 JSON（`schemaVersion`/`jobId`/`cli`/`status`/`exitCode`/`finalText`/`cost`/`worktree`/`logFile`），供 multicrew 免正则反解取 `jobId`/`finalText`/`worktree`。`finalizeJob` 持久化 `finalText` 进 job 记录，供结果择优免二次解析日志。非 `--json` 路径逐字不变。
+
+### 说明
+- 本版正式发版 `run --json`（提交 c4c1351，在 0.12.0 之后落地、未随即发版）。0.11.0（codex 无头适配）、0.12.0（codex skill 前端）已随各自提交发布，未单列于本文件。
+
 ## [0.10.0] - 2026-07-13
 
 ### 新增
