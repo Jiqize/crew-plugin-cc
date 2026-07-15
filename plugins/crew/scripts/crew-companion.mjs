@@ -291,7 +291,7 @@ function emitMulticrew(job, args) {
 
 // 创建任务记录并派生 worker。前台/后台统一走这里：每次运行都有任务 id，因此都能被 send 追问。
 // 前台模式轮询等待完成后渲染结果；即使本进程被杀（如 Bash 超时），worker 仍在后台继续，可用 /crew:result 取回。
-async function runJob(fields, { background }) {
+async function runJob(fields, { background, json }) {
   ensureDirs();
   const job = {
     status: "running",
@@ -315,6 +315,22 @@ async function runJob(fields, { background }) {
   const child = spawn(process.execPath, [SELF, "_exec", job.id], { detached: true, stdio: "ignore" });
   child.unref();
   if (background) {
+    // --json：单行结构化输出，供 multicrew 免正则取后台 jobId/worktree
+    if (json) {
+      console.log(JSON.stringify({
+        schemaVersion: 1,
+        jobId: job.id,
+        cli: job.cli,
+        status: "running",
+        exitCode: null,
+        finalText: null,
+        cost: null,
+        worktree: job.worktree ?? null,
+        logFile: job.logFile,
+        background: true
+      }));
+      return;
+    }
     console.log(`已启动后台任务 ${job.id}（${job.cli}/${job.mode}）。`);
     console.log(`看进度 /crew:progress ${job.id}，取结果 /crew:result ${job.id}，取消 /crew:cancel ${job.id}。`);
     if (job.worktree) console.log(`隔离 worktree：${job.worktree}`);
@@ -331,8 +347,24 @@ async function runJob(fields, { background }) {
     }
     if (j.status === "running") continue;
     const log = fs.existsSync(j.logFile) ? fs.readFileSync(j.logFile, "utf8").trim() : "";
+    const parsed = j.stream ? parseEvents(j.cli, log) : null;
+    // --json：单行结构化输出取代全部 prose，供 multicrew 免正则取 finalText/cost/worktree/status
+    if (json) {
+      const finalText = j.stream ? (parsed.finalText || "") : log;
+      console.log(JSON.stringify({
+        schemaVersion: 1,
+        jobId: j.id,
+        cli: j.cli,
+        status: j.status,
+        exitCode: j.exitCode ?? null,
+        finalText,
+        cost: j.stream ? (parsed.cost ?? null) : null,
+        worktree: j.worktree ?? null,
+        logFile: j.logFile
+      }));
+      process.exit(j.status === "done" ? (j.exitCode ?? 0) : 1);
+    }
     if (j.stream) {
-      const parsed = parseEvents(j.cli, log);
       console.log(parsed.finalText || log || "（无输出）");
       if (parsed.cost != null) console.log(`\n[crew] 成本：$${parsed.cost.toFixed(4)}`);
     } else {
@@ -364,6 +396,9 @@ function finalizeJob(job) {
       job.cost = parsed.cost;
       writeJson(jobFile(job.id), job);
     }
+    // 持久化最终产出，供 multicrew results/择优免二次解析日志
+    job.finalText = parsed.finalText ?? "";
+    writeJson(jobFile(job.id), job);
     if (parsed.sessionId) {
       job.sessionId = parsed.sessionId;
       writeJson(jobFile(job.id), job);
@@ -511,7 +546,7 @@ function cmdRun(opts) {
     repoKey: key,
     ...(opts.squad ? { squad: opts.squad, squadRun: opts.run } : {}),
     ...(preset ? { agent: preset.id, agentInstructions: preset.instructions, agentHash: redacted.agentHash } : {})
-  }, { background: !!opts.background });
+  }, { background: !!opts.background, json: !!opts.json });
 }
 
 // 后台 worker：真正跑 CLI 并把输出写进日志、退出后回写状态
