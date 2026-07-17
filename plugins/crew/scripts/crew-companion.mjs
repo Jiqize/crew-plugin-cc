@@ -15,7 +15,7 @@ const STATE_DIR = path.join(os.homedir(), ".crew");
 const JOBS_DIR = path.join(STATE_DIR, "jobs");
 const WT_DIR = path.join(STATE_DIR, "worktrees");
 const STATE_FILE = path.join(STATE_DIR, "state.json");
-const CLIS = ["omp", "grok", "agy", "opencode", "codex"];
+const CLIS = ["omp", "grok", "agy", "opencode", "codex", "kimi"];
 
 function fail(msg) {
   console.error(`[crew] ${msg}`);
@@ -164,6 +164,16 @@ function buildArgv(cli, { review, resume, sessionId, model, task, stream, reason
         t
       ];
     }
+    case "kimi":
+      // kimi -p 无头模式（Kimi Code 0.26.0 实测）：--output-format stream-json 事件流；
+      // -p 与 --yolo/--auto/--plan 全部互斥，prompt 模式默认自动执行工具，
+      // review 只读靠 prompt 前缀约束（同 agy）。续跑：-S <id> 精确续跑，无 id 用 -c 续同目录上一会话。
+      return [
+        "kimi", "-p", t,
+        ...(stream ? ["--output-format", "stream-json"] : []),
+        ...(resume ? (sessionId ? ["-S", sessionId] : ["-c"]) : []),
+        ...(model ? ["-m", model] : [])
+      ];
     default:
       throw new Error(`unknown cli: ${cli}`);
   }
@@ -242,6 +252,23 @@ function parseEvents(cli, text) {
         else if (it.type === "command_execution") push(`命令 ${it.command} (${it.status})`);
         else if (it.type === "reasoning") push(`思考: ${it.text ?? ""}`);
         else if (it.type === "error") push(`错误: ${it.message}`);
+      }
+    }
+  } else if (cli === "kimi") {
+    // kimi stream-json：{"role":"assistant","content"|"tool_calls"}、{"role":"tool"}、
+    // {"role":"meta","type":"session.resume_hint","session_id"}。工具 stdout 会裸混进日志，
+    // 非 JSON 行天然被跳过。全程无金额事件（订阅制），解析到正常收尾按 $0 入账（同 grok/codex 口径）。
+    for (const l of lines) {
+      let e;
+      try { e = JSON.parse(l); } catch { continue; }
+      if (e.role === "meta" && e.type === "session.resume_hint") {
+        if (e.session_id) sessionId = e.session_id;
+        if (cost == null) cost = 0;
+      } else if (e.role === "assistant") {
+        if (Array.isArray(e.tool_calls)) {
+          for (const tc of e.tool_calls) push(`工具 ${tc.function?.name || "?"}: ${tc.function?.arguments || ""}`);
+        }
+        if (e.content) { finalText = e.content; push(`输出: ${e.content}`); }
       }
     }
   } else {

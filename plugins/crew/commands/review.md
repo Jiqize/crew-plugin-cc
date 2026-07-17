@@ -1,6 +1,6 @@
 ---
 description: Ask an external agent CLI to review the current changes (read-only)
-argument-hint: "--by <omp|grok|agy|opencode|codex> [--base <ref>] [--background] [focus notes]"
+argument-hint: "--by <omp|grok|agy|opencode|codex|kimi> [--base <ref>] [--background] [focus notes]"
 allowed-tools: Bash(git:*), Agent
 ---
 

@@ -4,6 +4,13 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.14.0] - 2026-07-17
+
+### 新增
+- 接入 kimi（Moonshot Kimi Code CLI，实测 0.26.0）：`run --cli kimi` 走 `kimi -p <task> --output-format stream-json` 无头模式。`-p` 与 `--yolo`/`--auto`/`--plan` 全部互斥，prompt 模式默认自动执行工具，review 只读靠 prompt 前缀约束（同 agy）；续跑 `-S <sessionId>` 精确续跑、无 id 时 `-c` 续同目录上一会话；人设走 task 前缀注入。
+- kimi 事件解析：`assistant.content` 为回答、`assistant.tool_calls` 为工具活动、`meta session.resume_hint` 捕获会话 id；工具 stdout 会裸混进日志，非 JSON 行跳过。订阅制全程无金额事件，解析到正常收尾按 $0 入账（同 grok/codex 口径）。
+- 新增 `/crew:kimi` 命令与 `crew:crew-kimi` subagent；race/pipeline/review/setup/send/runner 文档的 CLI 清单同步扩到六个。
+
 ## [0.13.0] - 2026-07-15
 
 ### 新增

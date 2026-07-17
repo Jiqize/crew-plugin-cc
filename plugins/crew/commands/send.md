@@ -15,7 +15,7 @@ CREW_TASK
 Return the output verbatim. Notes:
 
 - Every crew run (foreground or background) is a tracked task since v0.5, so any of them can be followed up. Without a task-id it targets the most recent task.
-- omp, grok and opencode resume by exact session id when one was captured from the task's event log; otherwise they continue the most recent session in that task's directory (agy always does; codex resumes the most recent session via `exec resume --last`).
+- omp, grok, opencode and kimi resume by exact session id when one was captured from the task's event log; otherwise they continue the most recent session in that task's directory (agy always does; codex resumes the most recent session via `exec resume --last`).
 - The follow-up runs in the original task's working directory (including its isolated worktree, if any).
 - If the companion says the task is still running, relay that — the user can watch it with `/crew:progress` or cancel first.
 - `--background` runs the follow-up as a new tracked background task (it will print a new task id).
