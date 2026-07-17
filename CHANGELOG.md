@@ -4,6 +4,13 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.14.1] - 2026-07-17
+
+### 修复（kimi 接入 review 收口）
+- kimi $0 入账锚点：从"仅 session.resume_hint 出现"放宽为"解析到最终回答或会话收尾任一"——resume_hint 行被同 fd 追加的裸工具 stdout 粘连丢失时，成功任务不再落成"成本未知"。
+- kimi 事件字段类型防御：`content` 非字符串跳过（避免 finalText.trim() 在 cmdResult/cmdProgress 无保护路径抛 TypeError）；注释明示已知限制——kimi 无 end/error 事件，stopReason 恒空，假成功守卫只剩 !finalText 兜底。
+- race/review 文档标注只读强度分级：grok（plan）/opencode（去 --auto）为硬只读，agy/codex/kimi 仅 prompt 前缀软只读——只读 race 在意外写入敏感的仓库建议加 --worktree 或用 --by 排除软只读 CLI。
+
 ## [0.14.0] - 2026-07-17
 
 ### 新增

@@ -18,3 +18,5 @@ Steps:
    - Task text: "Review the code changes in this repository (<scope>). Look for bugs, regressions, and risky patterns. Report findings with file:line references and severity. Do NOT modify any files." Append the user's focus notes if any.
 3. Invoke the `crew:crew-runner` subagent (`subagent_type: "crew:crew-runner"`) with `cli: <reviewer>`, `mode: review`, and that task text. With `--background`, run the subagent in the background.
 4. Return the reviewer's output verbatim — no paraphrasing, no added commentary.
+
+Note: read-only is HARD-enforced for grok (plan mode) and opencode (no --auto), but prompt-prefix-only (soft) for agy, codex and kimi — their headless modes auto-execute tools. If the repo state is precious, mention this when the user picks a soft-enforcement reviewer, or suggest `git stash`/a worktree first.

@@ -257,20 +257,23 @@ function parseEvents(cli, text) {
   } else if (cli === "kimi") {
     // kimi stream-json：{"role":"assistant","content"|"tool_calls"}、{"role":"tool"}、
     // {"role":"meta","type":"session.resume_hint","session_id"}。工具 stdout 会裸混进日志，
-    // 非 JSON 行天然被跳过。全程无金额事件（订阅制），解析到正常收尾按 $0 入账（同 grok/codex 口径）。
+    // 非 JSON 行天然被跳过。content/arguments 按字符串防御（非字符串跳过，避免 finalText.trim() 崩）。
+    // 已知限制：kimi 事件流无 end/error 事件，stopReason 恒空 → 假成功守卫只剩 !finalText 兜底。
     for (const l of lines) {
       let e;
       try { e = JSON.parse(l); } catch { continue; }
       if (e.role === "meta" && e.type === "session.resume_hint") {
         if (e.session_id) sessionId = e.session_id;
-        if (cost == null) cost = 0;
       } else if (e.role === "assistant") {
         if (Array.isArray(e.tool_calls)) {
           for (const tc of e.tool_calls) push(`工具 ${tc.function?.name || "?"}: ${tc.function?.arguments || ""}`);
         }
-        if (e.content) { finalText = e.content; push(`输出: ${e.content}`); }
+        if (typeof e.content === "string" && e.content) { finalText = e.content; push(`输出: ${e.content}`); }
       }
     }
+    // 订阅制全程无金额事件：解析到最终回答或会话收尾任一即按 $0 入账
+    // （完成锚不只依赖 resume_hint——该行可能被同 fd 追加的裸工具 stdout 粘连而丢失）
+    if (cost == null && (finalText || sessionId)) cost = 0;
   } else {
     // agy 等无事件流的 CLI：原文即结果
     finalText = text.trim();

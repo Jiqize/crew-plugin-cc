@@ -15,6 +15,7 @@ Steps:
 2. Task nature:
    - Without `--write`: treat it as analysis/research — each contestant runs read-only (tell the runner `mode: review`).
    - With `--write`: the task modifies code — each contestant MUST run with worktree isolation so they don't clash (tell the runner to add `--worktree`).
+   - Read-only enforcement is HARD for grok (plan mode) and opencode (no --auto), but prompt-prefix-only (soft) for agy, codex and kimi — their headless modes auto-execute tools. For read-only races in repos where accidental writes matter, add `--worktree` anyway or exclude the soft-enforcement CLIs via `--by`.
 3. Launch ALL contestants in a single message as parallel `Agent` calls, one per CLI, using the matching subagent type (`crew:crew-omp`, `crew:crew-grok`, `crew:crew-agy`, `crew:crew-opencode`, `crew:crew-codex`, `crew:crew-kimi`), each forwarding the same task text.
 4. When all return, write a comparison:
    - A short verdict first: which CLI gave the best result and why (correctness, depth, actionability).
