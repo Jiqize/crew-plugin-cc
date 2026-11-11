@@ -4,6 +4,14 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.16.0] - 2026-11-11
+
+### 新增
+- Tern 可见模式（omp、codex）：在 Tern 里运行时不再无头执行，而是 `tern split` 在面板里交互式启动完整 TUI（omp `--auto-approve --session-dir <任务目录>`，codex `--dangerously-bypass-approvals-and-sandbox`），任务作为首条消息。worker 跟踪会话记录（omp 任务专属 session 目录；codex 按启动时间 + 工作目录 + 任务文本认领 `~/.codex/sessions` 的 rollout），转换成无头模式的事件格式写进任务日志，progress/result/成本/multicrew 账本无需改动。一轮回答结束（omp stopReason 非 toolUse；codex task_complete）即判完成，面板与 agent 保留可继续对话。
+- `send`：可见任务的面板还开着时，追问直接粘贴进该面板并等下一轮结束；面板已关则在新面板续跑会话。
+- `cancel`：可见任务连同面板一起关闭。面板被手动关闭或 agent 退出时任务判失败。
+- `--no-pane` 对 omp/codex 表示回到无头模式。
+
 ## [0.15.1] - 2026-11-11
 
 ### 新增

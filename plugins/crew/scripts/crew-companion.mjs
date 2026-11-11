@@ -16,6 +16,8 @@ const JOBS_DIR = path.join(STATE_DIR, "jobs");
 const WT_DIR = path.join(STATE_DIR, "worktrees");
 const STATE_FILE = path.join(STATE_DIR, "state.json");
 const CLIS = ["omp", "grok", "agy", "opencode", "codex", "kimi"];
+// 在 Tern 里以完整交互界面运行的 CLI（其余 CLI 仍无头运行 + 日志视图面板）
+const VISIBLE_CLIS = ["omp", "codex"];
 
 function fail(msg) {
   console.error(`[crew] ${msg}`);
@@ -95,7 +97,7 @@ function parseArgs(argv) {
 
 // 各 CLI 的无头调用映射（review 为只读语义）。
 // stream 打开各家的 JSON 事件流（供 progress/result 解析）；sessionId 用于精确续跑（omp/opencode 支持）。
-function buildArgv(cli, { review, resume, sessionId, model, task, stream, reasoningEffort, rules, systemPromptOverride, agentInstructions }) {
+function buildArgv(cli, { review, resume, sessionId, model, task, stream, reasoningEffort, rules, systemPromptOverride, agentInstructions, visible, sessionDir, sessionFile }) {
   // 人设注入矩阵：grok 走 --rules（用户已显式给 --rules 时让位，改走 task 前缀）；
   // omp/agy/opencode 恒走 task 前缀——omp 的 --append-system-prompt 实测内容可注入，
   // 但追加在 ~44k 系统提示末尾行为约束不生效（2026-07-13 冒烟），故不用。
@@ -107,6 +109,23 @@ function buildArgv(cli, { review, resume, sessionId, model, task, stream, reason
   const t = review
     ? `Read-only review task. Do NOT modify, create, or delete any files.\n\n${withPersona}`
     : withPersona;
+  // Tern 可见模式：交互式启动（完整 TUI），任务作为首条消息；结果由 worker 读会话记录取得
+  if (visible && cli === "omp") {
+    return [
+      "omp", "--auto-approve", "--session-dir", sessionDir,
+      ...(resume ? (sessionFile || sessionId ? ["-r", sessionFile || sessionId] : ["-c"]) : []),
+      ...(model ? ["--model", model] : []),
+      t
+    ];
+  }
+  if (visible && cli === "codex") {
+    return [
+      "codex", ...(resume ? ["resume", ...(sessionId ? [sessionId] : ["--last"])] : []),
+      "--dangerously-bypass-approvals-and-sandbox",
+      ...(model ? ["-m", model] : []),
+      t
+    ];
+  }
   switch (cli) {
     case "omp":
       // 显式 --auto-approve：不依赖各机器的 approvalMode 配置（always-ask 会让无头模式挂死）
@@ -324,22 +343,35 @@ function emitMulticrew(job, args) {
 // Tern 集成：在 Tern 终端里运行时，开一个分屏实时显示任务进度（best-effort，失败不影响任务）。
 // 首个任务在当前面板右侧分屏；之后的任务从上一个 crew 面板往下分，避免把发起面板越挤越窄。
 // 面板跑的是 `watch`：任务成功退出码 0，Tern 自动关闭面板；失败退出码 1，面板保留供查看。
-function openTernPane(job) {
+const ternBin = () => process.env.TERN_EXE || "tern";
+function ternSplitStacked(cwd, cmd, { keepOpen } = {}) {
   const anchor = process.env.TERN_PANE;
-  // CREW_NO_PANE=1：编排方（如 multicrew）自己开面板时关掉单任务面板
-  if (!anchor || process.env.CREW_NO_PANE === "1") return;
-  const tern = process.env.TERN_EXE || "tern";
-  const launch = ["--cwd", job.cwd, "--json", "--", process.execPath, SELF, "watch", job.id];
+  if (!anchor) return null;
+  const launch = ["--cwd", cwd, ...(keepOpen ? ["--keep-open"] : []), "--json", "--", ...cmd];
   const paneFile = path.join(STATE_DIR, "tern-pane.json");
   const prev = readJson(paneFile, {});
   const trySplit = (target, dir) => {
-    const r = spawnSync(tern, ["split", target, dir, ...launch], { encoding: "utf8", timeout: 5000 });
+    const r = spawnSync(ternBin(), ["split", target, dir, ...launch], { encoding: "utf8", timeout: 5000 });
     if (r.status !== 0) return null;
     try { return JSON.parse(r.stdout).block; } catch { return null; }
   };
   let block = prev.anchor === anchor && prev.block ? trySplit(String(prev.block), "down") : null;
   if (!block) block = trySplit(anchor, "right");
   if (block) writeJson(paneFile, { anchor, block });
+  return block;
+}
+
+// 日志视图面板（无可见模式的 CLI 用）。CREW_NO_PANE=1：编排方（如 multicrew）自己开面板时关掉
+function openTernPane(job) {
+  if (process.env.CREW_NO_PANE === "1") return;
+  ternSplitStacked(job.cwd, [process.execPath, SELF, "watch", job.id]);
+}
+
+// 面板里的程序是否还活着（面板被关或程序退出都算结束）
+function ternPaneAlive(block) {
+  const r = spawnSync(ternBin(), ["process", String(block), "--json"], { encoding: "utf8", timeout: 5000 });
+  if (r.status !== 0) return false;
+  try { return !!JSON.parse(r.stdout).child; } catch { return false; }
 }
 
 // Tern 面板里的实时进度视图：每秒刷新最近活动，任务结束后显示最终回答
@@ -393,7 +425,7 @@ async function runJob(fields, { background, json, noPane }) {
   ]);
   const child = spawn(process.execPath, [SELF, "_exec", job.id], { detached: true, stdio: "ignore" });
   child.unref();
-  if (!noPane) openTernPane(job);
+  if (!noPane && !job.visible) openTernPane(job);
   if (background) {
     // --json：单行结构化输出，供 multicrew 免正则取后台 jobId/worktree
     if (json) {
@@ -485,7 +517,11 @@ function finalizeJob(job) {
       if (job.repoKey) {
         const state = readJson(STATE_FILE, {});
         state[job.repoKey] = state[job.repoKey] || {};
-        state[job.repoKey][job.cli] = { ...state[job.repoKey][job.cli], sessionId: parsed.sessionId };
+        state[job.repoKey][job.cli] = {
+          ...state[job.repoKey][job.cli],
+          sessionId: parsed.sessionId,
+          sessionFile: job.sessionFile ?? null
+        };
         writeJson(STATE_FILE, state);
       }
     }
@@ -596,13 +632,21 @@ function cmdRun(opts) {
   const stream = cli !== "agy";
   // --resume 时优先用状态里记录的精确会话 id
   const prev = readJson(STATE_FILE, {})[key]?.[cli];
+  // Tern 可见模式：在 Tern 里且未 --no-pane 时，omp/codex 在面板里交互式运行
+  const visible = VISIBLE_CLIS.includes(cli) && !!process.env.TERN_PANE && !opts["no-pane"];
+  const sessionDir = visible && cli === "omp" ? path.join(JOBS_DIR, `${id}-session`) : undefined;
+  const resumeFile = opts.resume ? prev?.sessionFile : undefined;
   // 合并后的 model/reasoningEffort：显式旗标优先于预设（供 buildArgv 与审计落账共用）
   const model = opts.model || preset?.model;
   const reasoningEffort = opts.reasoningEffort || preset?.reasoning_effort;
   const argv = buildArgv(cli, {
     review: !!opts.review,
     resume: !!opts.resume,
-    sessionId: opts.resume ? prev?.sessionId : undefined,
+    // omp 可见模式的会话存在任务目录里，续跑用会话文件路径（omp -r 支持路径）
+    sessionId: opts.resume ? (cli === "omp" && resumeFile) || prev?.sessionId : undefined,
+    sessionFile: resumeFile,
+    visible,
+    sessionDir,
     model,
     reasoningEffort,
     rules: opts.rules,
@@ -620,6 +664,7 @@ function cmdRun(opts) {
     task: opts.task.slice(0, 500),
     // launchCwd 供 multicrew 定位项目级 ledger：worktree 任务也用发起目录（看板在主仓库看）
     cwd, worktree, argv, stream, launchCwd,
+    ...(visible ? { visible: true, sessionDir, resumeFile } : {}),
     auditArgv: redacted.auditArgv,
     ...(model ? { model } : {}),
     ...(reasoningEffort ? { reasoningEffort } : {}),
@@ -636,6 +681,7 @@ function cmdExec(id) {
   if (!job) process.exit(1);
   job.workerPid = process.pid;
   writeJson(jf, job);
+  if (job.visible) return execVisible(job);
   const out = fs.openSync(job.logFile, "a");
   const child = spawn(job.argv[0], job.argv.slice(1), { cwd: job.cwd, stdio: ["ignore", out, out] });
   job.cliPid = child.pid;
@@ -652,22 +698,167 @@ function cmdExec(id) {
     } catch {}
   }, 60000);
   heartbeat.unref();
-  child.on("exit", (code) => {
-    job.status = code === 0 ? "done" : "failed";
-    job.exitCode = code;
-    job.endedAt = new Date().toISOString();
-    writeJson(jf, job);
-    finalizeJob(job); // 可能把假成功改判 failed、回写 job.cost
-    if (job.status === "done") {
-      emitMulticrew(job, ["done", job.id, ...(typeof job.cost === "number" ? ["--cost", String(job.cost)] : [])]);
-    } else {
-      emitMulticrew(job, [
-        "fail", job.id, "--reason", job.failReason || `exit code ${code}`,
-        ...(Number.isInteger(code) ? ["--exit-code", String(code)] : [])
-      ]);
+  child.on("exit", (code) => finishJob(job, code === 0 ? "done" : "failed", code));
+}
+
+// 任务终态：回写状态 → 收尾（假成功识别/成本/通知）→ multicrew 记账 → worker 退出
+function finishJob(job, status, code, reason) {
+  job.status = status;
+  job.exitCode = code;
+  job.endedAt = new Date().toISOString();
+  if (reason) job.failReason = reason;
+  writeJson(jobFile(job.id), job);
+  finalizeJob(job); // 可能把假成功改判 failed、回写 job.cost
+  if (job.status === "done") {
+    emitMulticrew(job, ["done", job.id, ...(typeof job.cost === "number" ? ["--cost", String(job.cost)] : [])]);
+  } else {
+    emitMulticrew(job, [
+      "fail", job.id, "--reason", job.failReason || `exit code ${code}`,
+      ...(Number.isInteger(code) ? ["--exit-code", String(code)] : [])
+    ]);
+  }
+  process.exit(0);
+}
+
+// ── Tern 可见模式 ──────────────────────────────────────────────
+// agent 在 Tern 面板里交互式运行（用户能看、能接着聊）；worker 盯它的会话记录，
+// 转成无头模式的事件格式写进任务日志，于是 progress/result/成本/multicrew 都照旧工作。
+// 一轮回答结束即判任务完成，面板和 agent 保留。
+
+const completeLines = (file) => {
+  const text = fs.readFileSync(file, "utf8");
+  return text.slice(0, text.lastIndexOf("\n") + 1).split("\n").filter(Boolean);
+};
+const countLines = (file) => { try { return completeLines(file).length; } catch { return 0; } };
+
+// omp 会话行 → omp --mode json 事件（parseEvents 的 omp 分支直接可用）
+function convertOmp(e, out) {
+  if (e.type === "session" && e.id) out.lines.push({ type: "session", id: e.id });
+  else if (e.type === "message" && e.message?.role === "assistant") {
+    out.lines.push({ type: "message_end", message: e.message });
+    const sr = e.message.stopReason;
+    if (sr && !/tool/i.test(sr)) {
+      out.done = true;
+      if (/error|abort/i.test(sr)) out.failReason = `回合异常结束（stopReason: ${sr}）`;
     }
-    process.exit(0);
-  });
+  }
+}
+
+// codex rollout 行 → codex exec --json 事件
+function convertCodex(e, out) {
+  const p = e.payload || {};
+  if (e.type === "session_meta" && p.id) out.lines.push({ type: "thread.started", thread_id: p.id });
+  else if (e.type === "response_item" && p.type === "message" && p.role === "assistant") {
+    const text = (p.content || []).filter((c) => c.type === "output_text").map((c) => c.text).join("");
+    if (text) out.lines.push({ type: "item.completed", item: { type: "agent_message", text } });
+  } else if (e.type === "response_item" && /call$/.test(p.type || "")) {
+    const args = String(p.arguments ?? p.input ?? "").slice(0, 100);
+    out.lines.push({ type: "item.completed", item: { type: "command_execution", command: `${p.name ?? p.type} ${args}`, status: "completed" } });
+  } else if (e.type === "event_msg" && p.type === "task_complete") {
+    out.lines.push({ type: "turn.completed", usage: {} });
+    out.done = true;
+  } else if (e.type === "event_msg" && p.type === "turn_aborted") {
+    out.done = true;
+    out.failReason = "回合被中止";
+  }
+}
+
+// omp：会话存在任务专属目录，取其中最新的 .jsonl
+function findOmpSession(job) {
+  try {
+    const files = fs.readdirSync(job.sessionDir).filter((f) => f.endsWith(".jsonl") && !f.startsWith("."))
+      .map((f) => path.join(job.sessionDir, f));
+    files.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+    return files[0] || null;
+  } catch { return null; }
+}
+
+// codex：会话统一存在 ~/.codex/sessions/年/月/日/，按「启动后新建 + 工作目录一致 + 含任务文本 + 未被其它任务占用」认领
+function findCodexSession(job, sinceMs) {
+  const real = (p) => { try { return fs.realpathSync(p); } catch { return p; } };
+  const cwd = real(job.cwd);
+  const snippet = job.task.split(/["\\\n]/)[0].slice(0, 30);
+  const claimed = new Set(loadJobs().filter((j) => j.id !== job.id && j.sessionFile).map((j) => j.sessionFile));
+  const root = path.join(os.homedir(), ".codex", "sessions");
+  for (const d of [new Date(), new Date(Date.now() - 86400000)]) {
+    const dir = path.join(root, String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0"));
+    let files = [];
+    try { files = fs.readdirSync(dir).filter((f) => f.startsWith("rollout-") && f.endsWith(".jsonl")).map((f) => path.join(dir, f)); } catch {}
+    for (const f of files) {
+      try {
+        if (fs.statSync(f).birthtimeMs < sinceMs || claimed.has(f)) continue;
+        const text = fs.readFileSync(f, "utf8");
+        const meta = JSON.parse(text.slice(0, text.indexOf("\n")));
+        if (real(meta.payload?.cwd || "") === cwd && text.includes(snippet)) return f;
+      } catch {}
+    }
+  }
+  return null;
+}
+
+// 会话跟踪器：每次 poll 读出新增的完整行，转换成日志事件并判断这一轮是否结束
+function makeTracker(job) {
+  // 追问：沿用原会话文件，从当前末尾开始读；续跑：原会话文件可能被追加，记下起始行数
+  let file = job.ternBlock && job.sessionFile && fs.existsSync(job.sessionFile) ? job.sessionFile : null;
+  let offset = file ? countLines(file) : 0;
+  const resumeOffset = job.resumeFile && fs.existsSync(job.resumeFile) ? countLines(job.resumeFile) : 0;
+  const since = Date.parse(job.startedAt) - 5000;
+  const find = () => {
+    const fresh = job.cli === "omp" ? findOmpSession(job) : findCodexSession(job, since);
+    if (fresh) return [fresh, 0];
+    if (job.resumeFile && countLines(job.resumeFile) > resumeOffset) return [job.resumeFile, resumeOffset];
+    return [null, 0];
+  };
+  const convert = job.cli === "omp" ? convertOmp : convertCodex;
+  return {
+    get file() { return file; },
+    poll() {
+      const out = { lines: [], done: false };
+      if (!file) {
+        [file, offset] = find();
+        if (!file) return out;
+      }
+      const lines = completeLines(file);
+      for (const l of lines.slice(offset)) {
+        let e;
+        try { e = JSON.parse(l); } catch { continue; }
+        convert(e, out);
+      }
+      offset = lines.length;
+      return out;
+    }
+  };
+}
+
+async function execVisible(job) {
+  const jf = jobFile(job.id);
+  // 只合并本 worker 管的字段，避免覆盖 cancel 写入的终态
+  const save = (fields) => { Object.assign(job, fields); writeJson(jf, { ...readJson(jf, job), ...fields }); };
+  const tracker = makeTracker(job);
+  if (job.ternBlock) {
+    // 追问：把消息粘贴进已开着的 agent 面板并回车
+    spawnSync(ternBin(), ["send", String(job.ternBlock), "paste", job.sendText], { timeout: 5000 });
+    spawnSync(ternBin(), ["send", String(job.ternBlock), "keys", "Enter"], { timeout: 5000 });
+  } else {
+    const block = ternSplitStacked(job.cwd, job.argv, { keepOpen: true });
+    if (!block) return finishJob(job, "failed", 1, "无法在 Tern 里打开面板");
+    save({ ternBlock: block });
+  }
+  let lastBeat = Date.now();
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 1000));
+    if (readJson(jf, {}).status !== "running") process.exit(0); // 已被取消
+    let r;
+    try { r = tracker.poll(); } catch { r = { lines: [], done: false }; }
+    if (r.lines.length) fs.appendFileSync(job.logFile, r.lines.map((l) => JSON.stringify(l) + "\n").join(""));
+    if (tracker.file && tracker.file !== job.sessionFile) save({ sessionFile: tracker.file });
+    if (Date.now() - lastBeat > 60000) {
+      lastBeat = Date.now();
+      emitMulticrew(job, ["log", job.id, "visible agent running"]);
+    }
+    if (r.done) return finishJob(job, r.failReason ? "failed" : "done", r.failReason ? 1 : 0, r.failReason);
+    if (!ternPaneAlive(job.ternBlock)) return finishJob(job, "failed", 1, "面板已关闭或 agent 已退出，任务没有完成");
+  }
 }
 
 function isAlive(pid) {
@@ -754,11 +945,27 @@ function cmdSend(opts) {
   const job = captureSession(jobs[0]);
   if (!opts.task) return fail("缺少追问内容（放在 -- 之后）");
   if (job.status === "running") return fail(`任务 ${job.id} 还在运行，等它结束（/crew:progress 看进度）或先 /crew:cancel`);
+  const newId = "c-" + crypto.randomBytes(3).toString("hex");
+  if (job.visible && job.ternBlock && ternPaneAlive(job.ternBlock)) {
+    // 可见模式且面板还开着：直接把追问发进那个 agent 面板
+    markSession(job.cwd, job.cli, opts.task);
+    return runJob({
+      id: newId, cli: job.cli, mode: job.mode, task: opts.task.slice(0, 500),
+      cwd: job.cwd, worktree: job.worktree, parent: job.id, argv: [], stream: true,
+      visible: true, ternBlock: job.ternBlock, sessionFile: job.sessionFile, sendText: opts.task,
+      repoKey: job.repoKey || repoKey(job.cwd)
+    }, { background: !!opts.background });
+  }
+  const visible = VISIBLE_CLIS.includes(job.cli) && !!process.env.TERN_PANE && !opts["no-pane"];
+  const sessionDir = visible && job.cli === "omp" ? path.join(JOBS_DIR, `${newId}-session`) : undefined;
   const stream = job.cli !== "agy";
   const argv = buildArgv(job.cli, {
     review: job.mode === "review",
     resume: true,
-    sessionId: job.sessionId,
+    sessionId: (job.cli === "omp" && job.sessionFile) || job.sessionId,
+    sessionFile: job.sessionFile,
+    visible,
+    sessionDir,
     model: opts.model,
     reasoningEffort: opts.reasoningEffort,
     rules: opts.rules,
@@ -768,7 +975,7 @@ function cmdSend(opts) {
   });
   markSession(job.cwd, job.cli, opts.task);
   runJob({
-    id: "c-" + crypto.randomBytes(3).toString("hex"),
+    id: newId,
     cli: job.cli,
     mode: job.mode,
     task: opts.task.slice(0, 500),
@@ -776,6 +983,7 @@ function cmdSend(opts) {
     worktree: job.worktree,
     parent: job.id,
     argv, stream,
+    ...(visible ? { visible: true, sessionDir, resumeFile: job.sessionFile } : {}),
     repoKey: job.repoKey || repoKey(job.cwd)
   }, { background: !!opts.background, noPane: !!opts["no-pane"] });
 }
@@ -815,6 +1023,8 @@ function cmdCancel(idArg) {
   } catch {
     if (job.cliPid) try { process.kill(job.cliPid, "SIGTERM"); } catch {}
   }
+  // 可见模式：关掉 agent 面板（连同里面的 agent）
+  if (job.ternBlock) spawnSync(ternBin(), ["close", String(job.ternBlock)], { timeout: 5000 });
   job.status = "canceled";
   job.endedAt = new Date().toISOString();
   writeJson(jobFile(job.id), job);
