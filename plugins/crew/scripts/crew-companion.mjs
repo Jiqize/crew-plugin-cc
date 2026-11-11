@@ -448,6 +448,7 @@ async function runJob(fields, { background, json, noPane }) {
     if (job.worktree) console.log(`隔离 worktree：${job.worktree}`);
     return;
   }
+  let endSeenAt;
   for (;;) {
     await new Promise((r) => setTimeout(r, 500));
     const j = readJson(jobFile(job.id), null);
@@ -458,6 +459,11 @@ async function runJob(fields, { background, json, noPane }) {
       emitMulticrew(j, ["fail", j.id, "--reason", "worker process died (interrupted)"]);
     }
     if (j.status === "running") continue;
+    // 终态先于收尾写入：等收尾写好 finalText/原文文件（最多 3 秒）再输出
+    if (!("finalText" in j)) {
+      endSeenAt ??= Date.now();
+      if (Date.now() - endSeenAt < 3000) continue;
+    }
     const log = fs.existsSync(j.logFile) ? fs.readFileSync(j.logFile, "utf8").trim() : "";
     const parsed = j.stream ? parseEvents(j.cli, log) : null;
     // --json：单行结构化输出取代全部 prose，供 multicrew 免正则取 finalText/cost/worktree/status
@@ -482,6 +488,7 @@ async function runJob(fields, { background, json, noPane }) {
     } else {
       console.log(log || "（无输出）");
     }
+    if (j.finalFile) console.log(`[crew] 原文：${j.finalFile}`);
     console.log(`[crew] 任务 ${j.id} ${j.status}，追问用 /crew:send ${j.id} -- <消息>。`);
     if (j.failReason) console.log(`[crew] ⚠️ ${j.failReason}`);
     for (const h of j.status !== "done" || j.failReason ? diagnose(log) : []) console.log(`[crew] 提示：${h}`);
@@ -510,6 +517,11 @@ function finalizeJob(job) {
     }
     // 持久化最终产出，供 multicrew results/择优免二次解析日志
     job.finalText = parsed.finalText ?? "";
+    // 原文另存一份文件：写报告时直接读这个文件，避免经模型转述走样
+    if (job.finalText) {
+      job.finalFile = path.join(JOBS_DIR, `${job.id}.final.md`);
+      fs.writeFileSync(job.finalFile, job.finalText + "\n");
+    }
     writeJson(jobFile(job.id), job);
     if (parsed.sessionId) {
       job.sessionId = parsed.sessionId;
@@ -908,6 +920,7 @@ function cmdResult(idArg) {
     const parsed = parseEvents(job.cli, log);
     console.log(parsed.finalText || "（暂无最终回答）");
     if (parsed.cost != null) console.log(`\n[crew] 成本：$${parsed.cost.toFixed(4)}`);
+    if (job.finalFile) console.log(`[crew] 原文：${job.finalFile}`);
     console.log(`[crew] 原始事件日志：${job.logFile}`);
   } else {
     console.log(log || "（暂无输出）");

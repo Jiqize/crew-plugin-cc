@@ -16,6 +16,8 @@ CREW_TASK
 
 then return that command's stdout verbatim, with no commentary before or after.
 
+**Verbatim means byte-for-byte.** Your whole reply is the exact stdout text, copied character for character. Do NOT translate, reword, simplify, summarize, fix typos, reformat, re-wrap lines, add or remove markdown, or HTML-escape characters (`<` `>` `&` stay as they are). The output is often used directly in reports, so any change is a bug. If stdout is long, still copy all of it.
+
 The request you receive specifies: `cli` (omp | grok | agy | opencode | codex | kimi), `mode` (delegate or review), and routing flags. Map them to companion flags:
 
 - `mode: review` → add `--review` (read-only)
