@@ -344,29 +344,40 @@ function emitMulticrew(job, args) {
 // 首个任务在当前面板右侧分屏；之后的任务从上一个 crew 面板往下分，避免把发起面板越挤越窄。
 // 面板跑的是 `watch`：任务成功退出码 0，Tern 自动关闭面板；失败退出码 1，面板保留供查看。
 const ternBin = () => process.env.TERN_EXE || "tern";
-function ternSplitStacked(cwd, cmd, { keepOpen } = {}) {
+// 分屏布局：主会话在左，每种 CLI 一列（新列紧贴主会话、整列高），同一 CLI 在本列往下叠。
+// 布局按发起面板（TERN_PANE）分别记录，多个对话互不干扰。
+function ternPaneExists(block) {
+  return spawnSync(ternBin(), ["process", String(block), "--json"], { encoding: "utf8", timeout: 5000 }).status === 0;
+}
+function ternSplitStacked(cwd, cmd, { keepOpen, cli = "other" } = {}) {
   const anchor = process.env.TERN_PANE;
   if (!anchor) return null;
   const launch = ["--cwd", cwd, ...(keepOpen ? ["--keep-open"] : []), "--json", "--", ...cmd];
   const paneFile = path.join(STATE_DIR, "tern-pane.json");
-  const prev = readJson(paneFile, {});
+  const state = readJson(paneFile, {});
+  const layouts = state.layouts || {};
+  const columns = layouts[anchor] || {};
   const trySplit = (target, dir) => {
-    const r = spawnSync(ternBin(), ["split", target, dir, ...launch], { encoding: "utf8", timeout: 5000 });
+    const r = spawnSync(ternBin(), ["split", String(target), dir, ...launch], { encoding: "utf8", timeout: 5000 });
     if (r.status !== 0) return null;
     try { return JSON.parse(r.stdout).block; } catch { return null; }
   };
-  let block = prev.anchor === anchor && prev.block ? trySplit(String(prev.block), "down") : null;
-  if (!block) block = trySplit(anchor, "right");
-  // TERN_PANE 可能是过期 id（如 Codex 会缓存启动时的环境变量），失败时在当前焦点面板旁开
-  if (!block) block = trySplit("@focused", "right");
-  if (block) writeJson(paneFile, { anchor, block });
+  // 本 CLI 已有列：在列里最后一个还在的面板下方开
+  const column = (columns[cli] || []).filter(ternPaneExists);
+  let block = column.length ? trySplit(column.at(-1), "down") : null;
+  // 没有列：在主会话右侧开新整列；TERN_PANE 过期（如 Codex 缓存旧环境变量）时在焦点面板旁开
+  if (!block) block = trySplit(anchor, "right") || trySplit("@focused", "right");
+  if (block) {
+    column.push(block);
+    writeJson(paneFile, { layouts: { ...layouts, [anchor]: { ...columns, [cli]: column } } });
+  }
   return block;
 }
 
 // 日志视图面板（无可见模式的 CLI 用）。CREW_NO_PANE=1：编排方（如 multicrew）自己开面板时关掉
 function openTernPane(job) {
   if (process.env.CREW_NO_PANE === "1") return;
-  ternSplitStacked(job.cwd, [process.execPath, SELF, "watch", job.id]);
+  ternSplitStacked(job.cwd, [process.execPath, SELF, "watch", job.id], { cli: job.cli });
 }
 
 // 面板里的程序是否还活着（面板被关或程序退出都算结束）
@@ -620,7 +631,13 @@ function resolveSquadPreset(id) {
   return parsed;
 }
 
+// 防转包：crew 派出的执行端（带 CREW_JOB_ID）不能再通过 crew 派任务
+function refuseNested() {
+  if (process.env.CREW_JOB_ID) fail(`你是 crew 派出的执行端（任务 ${process.env.CREW_JOB_ID}），请直接自己完成任务，不要再通过 crew 派给别的 agent。`);
+}
+
 function cmdRun(opts) {
+  refuseNested();
   // squad 归组：run id 由编排者铸造，crew 不代铸
   if (opts.squad && !opts.run) fail("--squad 需要显式 --run <rid>（run id 由编排者铸造，可先 multicrew task create --squad 获取）");
   if (opts.run && !opts.squad) fail("--run 需要 --squad");
@@ -697,7 +714,7 @@ function cmdExec(id) {
   writeJson(jf, job);
   if (job.visible) return execVisible(job);
   const out = fs.openSync(job.logFile, "a");
-  const child = spawn(job.argv[0], job.argv.slice(1), { cwd: job.cwd, stdio: ["ignore", out, out] });
+  const child = spawn(job.argv[0], job.argv.slice(1), { cwd: job.cwd, stdio: ["ignore", out, out], env: { ...process.env, CREW_JOB_ID: job.id } });
   job.cliPid = child.pid;
   writeJson(jf, job);
   // 心跳：日志有增长才发 progress（size 单调递增保证语义 ID 不重复；无增长不发，配合看板 stalled 判定）
@@ -854,7 +871,8 @@ async function execVisible(job) {
     spawnSync(ternBin(), ["send", String(job.ternBlock), "paste", job.sendText], { timeout: 5000 });
     spawnSync(ternBin(), ["send", String(job.ternBlock), "keys", "Enter"], { timeout: 5000 });
   } else {
-    const block = ternSplitStacked(job.cwd, job.argv, { keepOpen: true });
+    // env 前缀：面板里的 agent 带上 CREW_JOB_ID，它再调 crew 会被拒绝（防层层转包）
+    const block = ternSplitStacked(job.cwd, ["env", `CREW_JOB_ID=${job.id}`, ...job.argv], { keepOpen: true, cli: job.cli });
     if (!block) return finishJob(job, "failed", 1, "无法在 Tern 里打开面板");
     save({ ternBlock: block });
   }
@@ -955,6 +973,7 @@ function cmdProgress(idArg) {
 // 追问：向已结束任务的会话追加一条消息（omp/grok/opencode 捕获到会话 id 时精确续跑）。
 // v0.5 起前台运行也有任务记录，因此任何一次运行都可追问。
 function cmdSend(opts) {
+  refuseNested();
   const jobs = loadJobs(opts._[0]);
   if (!jobs.length) return fail("没有可追问的任务");
   const job = captureSession(jobs[0]);
