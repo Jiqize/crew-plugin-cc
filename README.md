@@ -41,7 +41,9 @@ claude plugin install crew@crew
 | `/crew:costs` | 成本台账：今天/累计各 CLI 花了多少 |
 | `/crew:setup` | 检查六个 CLI 是否安装可用 |
 
-通用旗标：`--background`（后台跑，companion 返回任务 id）、`--resume`（继续该 CLI 上次会话）、`--fresh`（强制新会话）、`--worktree`（在独立 git worktree 里跑，避免并行互踩）、`--model <m>`（指定模型）。
+通用旗标：`--background`（后台跑，companion 返回任务 id）、`--resume`（继续该 CLI 上次会话）、`--fresh`（强制新会话）、`--worktree`（在独立 git worktree 里跑，避免并行互踩）、`--model <m>`（指定模型）、`--no-pane`（不开 Tern 进度面板）。
+
+**Tern 终端集成**：在 Tern 终端里运行时，每个 crew 任务启动后会自动在右侧分屏实时显示进度（工具调用、输出、最终回答）；多个任务从上一个 crew 面板往下叠。任务成功面板自动关闭，失败/取消则保留供查看。不在 Tern 里时无任何变化。
 
 同一仓库对某 CLI 有过历史会话且未指定 `--resume/--fresh` 时，会像 Codex 插件一样问一次"继续上次还是开新会话"。
 

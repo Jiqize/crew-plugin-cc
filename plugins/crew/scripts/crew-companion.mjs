@@ -321,7 +321,55 @@ function emitMulticrew(job, args) {
 
 // 创建任务记录并派生 worker。前台/后台统一走这里：每次运行都有任务 id，因此都能被 send 追问。
 // 前台模式轮询等待完成后渲染结果；即使本进程被杀（如 Bash 超时），worker 仍在后台继续，可用 /crew:result 取回。
-async function runJob(fields, { background, json }) {
+// Tern 集成：在 Tern 终端里运行时，开一个分屏实时显示任务进度（best-effort，失败不影响任务）。
+// 首个任务在当前面板右侧分屏；之后的任务从上一个 crew 面板往下分，避免把发起面板越挤越窄。
+// 面板跑的是 `watch`：任务成功退出码 0，Tern 自动关闭面板；失败退出码 1，面板保留供查看。
+function openTernPane(job) {
+  const anchor = process.env.TERN_PANE;
+  if (!anchor) return;
+  const tern = process.env.TERN_EXE || "tern";
+  const launch = ["--cwd", job.cwd, "--json", "--", process.execPath, SELF, "watch", job.id];
+  const paneFile = path.join(STATE_DIR, "tern-pane.json");
+  const prev = readJson(paneFile, {});
+  const trySplit = (target, dir) => {
+    const r = spawnSync(tern, ["split", target, dir, ...launch], { encoding: "utf8", timeout: 5000 });
+    if (r.status !== 0) return null;
+    try { return JSON.parse(r.stdout).block; } catch { return null; }
+  };
+  let block = prev.anchor === anchor && prev.block ? trySplit(String(prev.block), "down") : null;
+  if (!block) block = trySplit(anchor, "right");
+  if (block) writeJson(paneFile, { anchor, block });
+}
+
+// Tern 面板里的实时进度视图：每秒刷新最近活动，任务结束后显示最终回答
+async function cmdWatch(id) {
+  let last = "";
+  for (;;) {
+    const job = loadJobs(id)[0];
+    if (!job) fail(`没有任务 ${id}`);
+    const log = fs.existsSync(job.logFile) ? fs.readFileSync(job.logFile, "utf8") : "";
+    const parsed = parseEvents(job.stream ? job.cli : "_plain", log);
+    const end = job.endedAt ? new Date(job.endedAt) : new Date();
+    const elapsed = Math.round((end - new Date(job.startedAt)) / 1000);
+    const lines = [`[crew] ${job.id}  ${job.cli}/${job.mode}  ${job.status}  ${elapsed}s`, `任务：${job.task.slice(0, 100)}`, ""];
+    if (job.status === "running") {
+      const rows = Math.max(5, (process.stdout.rows || 30) - lines.length - 1);
+      lines.push(...parsed.activities.slice(-rows).map((a) => `  ${a}`));
+    } else {
+      lines.push(...parsed.activities.slice(-8).map((a) => `  ${a}`), "", "── 最终回答 ──", parsed.finalText || "（无输出）");
+      if (job.failReason) lines.push("", `⚠️ ${job.failReason}`);
+    }
+    const out = lines.join("\n");
+    if (out !== last) {
+      process.stdout.write("\x1b[H\x1b[2J" + out + "\n");
+      last = out;
+    }
+    if (job.status !== "running") process.exit(job.status === "done" && !job.failReason ? 0 : 1);
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
+
+async function runJob(fields, { background, json, noPane }) {
   ensureDirs();
   const job = {
     status: "running",
@@ -344,6 +392,7 @@ async function runJob(fields, { background, json }) {
   ]);
   const child = spawn(process.execPath, [SELF, "_exec", job.id], { detached: true, stdio: "ignore" });
   child.unref();
+  if (!noPane) openTernPane(job);
   if (background) {
     // --json：单行结构化输出，供 multicrew 免正则取后台 jobId/worktree
     if (json) {
@@ -576,7 +625,7 @@ function cmdRun(opts) {
     repoKey: key,
     ...(opts.squad ? { squad: opts.squad, squadRun: opts.run } : {}),
     ...(preset ? { agent: preset.id, agentInstructions: preset.instructions, agentHash: redacted.agentHash } : {})
-  }, { background: !!opts.background, json: !!opts.json });
+  }, { background: !!opts.background, json: !!opts.json, noPane: !!opts["no-pane"] });
 }
 
 // 后台 worker：真正跑 CLI 并把输出写进日志、退出后回写状态
@@ -727,7 +776,7 @@ function cmdSend(opts) {
     parent: job.id,
     argv, stream,
     repoKey: job.repoKey || repoKey(job.cwd)
-  }, { background: !!opts.background });
+  }, { background: !!opts.background, noPane: !!opts["no-pane"] });
 }
 
 // 成本台账：按天/按 CLI 汇总各任务成本（数据来自 finalizeJob 写入的 costs.jsonl）
@@ -804,6 +853,7 @@ switch (cmd) {
   case "status": cmdStatus(opts._[0], !!opts.json); break;
   case "result": cmdResult(opts._[0]); break;
   case "progress": cmdProgress(opts._[0]); break;
+  case "watch": cmdWatch(opts._[0]); break;
   case "send": cmdSend(opts); break;
   case "costs": cmdCosts(); break;
   case "cancel": cmdCancel(opts._[0]); break;

@@ -24,6 +24,7 @@ The request you receive specifies: `cli` (omp | grok | agy | opencode | codex | 
 - model specified → add `--model <m>`
 - worktree isolation requested → add `--worktree`
 - specific working directory requested (e.g. an existing worktree) → add `--cwd <dir>`
+- `--no-pane` requested → add `--no-pane` (don't open the Tern progress pane)
 
 Rules:
 

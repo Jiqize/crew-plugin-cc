@@ -4,6 +4,12 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.15.0] - 2026-11-11
+
+### 新增
+- Tern 终端集成：检测到 `TERN_PANE`（运行在 Tern 里）时，`run`/`send` 启动任务后用 `tern split` 自动开分屏，跑新增的 `watch <id>` 子命令每秒刷新最近活动、结束后显示最终回答。首个面板在发起面板右侧，后续任务从上一个 crew 面板往下分（记录在 `~/.crew/tern-pane.json`）。任务成功 watch 退出码 0、Tern 自动关闭面板；失败/取消/中断退出码 1，面板保留。best-effort，开面板失败不影响任务。
+- `--no-pane`：单次禁用 Tern 面板。
+
 ## [0.14.1] - 2026-07-17
 
 ### 修复（kimi 接入 review 收口）

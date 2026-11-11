@@ -1,0 +1,20 @@
+{"id":"c-f90de9:created","taskId":"c-f90de9","type":"created","at":"2026-11-11T01:07:31.959Z","title":"只回答：1+1 等于几？只输出数字。","executor":"codex"}
+{"id":"c-f90de9:started","taskId":"c-f90de9","type":"started","at":"2026-11-11T01:07:31.968Z"}
+{"id":"c-f90de9:dispatched","taskId":"c-f90de9","type":"dispatched","at":"2026-11-11T01:07:32.023Z","cli":"codex","argv":["codex","exec","--json","--dangerously-bypass-approvals-and-sandbox","--skip-git-repo-check","Read-only review task. Do NOT modify, create, or delete any files.\n\n只回答：1+1 等于几？只输出数字。"],"cwd":"/Users/lianglei/Projects/git/crew","jobId":"c-f90de9"}
+{"id":"c-f90de9:done","taskId":"c-f90de9","type":"done","at":"2026-11-11T01:07:46.356Z","cost":0}
+{"id":"c-72b7b2:created","taskId":"c-72b7b2","type":"created","at":"2026-11-11T01:07:56.465Z","title":"只输出数字 3","executor":"codex"}
+{"id":"c-72b7b2:started","taskId":"c-72b7b2","type":"started","at":"2026-11-11T01:07:56.475Z"}
+{"id":"c-72b7b2:dispatched","taskId":"c-72b7b2","type":"dispatched","at":"2026-11-11T01:07:56.531Z","cli":"codex","argv":["codex","exec","--json","--dangerously-bypass-approvals-and-sandbox","--skip-git-repo-check","Read-only review task. Do NOT modify, create, or delete any files.\n\n只输出数字 3"],"cwd":"/Users/lianglei/Projects/git/crew","jobId":"c-72b7b2"}
+{"id":"c-f517ea:created","taskId":"c-f517ea","type":"created","at":"2026-11-11T01:07:56.675Z","title":"只输出数字 4","executor":"codex"}
+{"id":"c-f517ea:started","taskId":"c-f517ea","type":"started","at":"2026-11-11T01:07:56.681Z"}
+{"id":"c-f517ea:dispatched","taskId":"c-f517ea","type":"dispatched","at":"2026-11-11T01:07:56.738Z","cli":"codex","argv":["codex","exec","--json","--dangerously-bypass-approvals-and-sandbox","--skip-git-repo-check","Read-only review task. Do NOT modify, create, or delete any files.\n\n只输出数字 4"],"cwd":"/Users/lianglei/Projects/git/crew","jobId":"c-f517ea"}
+{"id":"c-f517ea:cancelled","taskId":"c-f517ea","type":"cancelled","at":"2026-11-11T01:07:58.920Z"}
+{"id":"c-72b7b2:done","taskId":"c-72b7b2","type":"done","at":"2026-11-11T01:08:19.363Z","cost":0}
+{"id":"c-daf08f:created","taskId":"c-daf08f","type":"created","at":"2026-11-11T01:08:32.529Z","title":"只输出 5","executor":"codex"}
+{"id":"c-daf08f:started","taskId":"c-daf08f","type":"started","at":"2026-11-11T01:08:32.536Z"}
+{"id":"c-daf08f:dispatched","taskId":"c-daf08f","type":"dispatched","at":"2026-11-11T01:08:32.593Z","cli":"codex","argv":["codex","exec","--json","--dangerously-bypass-approvals-and-sandbox","--skip-git-repo-check","Read-only review task. Do NOT modify, create, or delete any files.\n\n只输出 5"],"cwd":"/Users/lianglei/Projects/git/crew","jobId":"c-daf08f"}
+{"id":"c-dc258f:created","taskId":"c-dc258f","type":"created","at":"2026-11-11T01:08:32.700Z","title":"只输出 6","executor":"codex"}
+{"id":"c-dc258f:started","taskId":"c-dc258f","type":"started","at":"2026-11-11T01:08:32.706Z"}
+{"id":"c-dc258f:dispatched","taskId":"c-dc258f","type":"dispatched","at":"2026-11-11T01:08:32.767Z","cli":"codex","argv":["codex","exec","--json","--dangerously-bypass-approvals-and-sandbox","--skip-git-repo-check","Read-only review task. Do NOT modify, create, or delete any files.\n\n只输出 6"],"cwd":"/Users/lianglei/Projects/git/crew","jobId":"c-dc258f"}
+{"id":"c-daf08f:cancelled","taskId":"c-daf08f","type":"cancelled","at":"2026-11-11T01:08:34.867Z"}
+{"id":"c-dc258f:cancelled","taskId":"c-dc258f","type":"cancelled","at":"2026-11-11T01:08:34.952Z"}
