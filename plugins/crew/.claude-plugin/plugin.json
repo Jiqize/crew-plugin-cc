@@ -1,6 +1,6 @@
 {
   "name": "crew",
-  "version": "0.16.1",
+  "version": "0.16.2",
   "description": "Delegate tasks from Claude Code to other agent CLIs: omp (oh-my-pi), grok, antigravity (agy), opencode, codex, kimi (Kimi Code).",
   "author": {
     "name": "lianglei"

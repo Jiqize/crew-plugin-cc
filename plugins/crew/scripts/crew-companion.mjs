@@ -357,6 +357,8 @@ function ternSplitStacked(cwd, cmd, { keepOpen } = {}) {
   };
   let block = prev.anchor === anchor && prev.block ? trySplit(String(prev.block), "down") : null;
   if (!block) block = trySplit(anchor, "right");
+  // TERN_PANE 可能是过期 id（如 Codex 会缓存启动时的环境变量），失败时在当前焦点面板旁开
+  if (!block) block = trySplit("@focused", "right");
   if (block) writeJson(paneFile, { anchor, block });
   return block;
 }

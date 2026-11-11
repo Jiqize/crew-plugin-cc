@@ -4,6 +4,11 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.16.2] - 2026-11-11
+
+### 修复
+- 从 Codex 里调用 crew 时开不出 Tern 面板：Codex 会缓存启动时的环境变量，`TERN_PANE` 可能是过期 id。分屏失败时回退到 `@focused`（当前焦点面板）旁边开。
+
 ## [0.16.1] - 2026-11-11
 
 ### 修复
