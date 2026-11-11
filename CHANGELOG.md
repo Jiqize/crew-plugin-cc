@@ -4,6 +4,11 @@
 
 本变更日志遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.15.1] - 2026-11-11
+
+### 新增
+- 环境变量 `CREW_NO_PANE=1` 关闭 Tern 单任务面板：供 multicrew 等编排方自己开面板时使用，避免重复。
+
 ## [0.15.0] - 2026-11-11
 
 ### 新增

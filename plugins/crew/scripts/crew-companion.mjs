@@ -326,7 +326,8 @@ function emitMulticrew(job, args) {
 // 面板跑的是 `watch`：任务成功退出码 0，Tern 自动关闭面板；失败退出码 1，面板保留供查看。
 function openTernPane(job) {
   const anchor = process.env.TERN_PANE;
-  if (!anchor) return;
+  // CREW_NO_PANE=1：编排方（如 multicrew）自己开面板时关掉单任务面板
+  if (!anchor || process.env.CREW_NO_PANE === "1") return;
   const tern = process.env.TERN_EXE || "tern";
   const launch = ["--cwd", job.cwd, "--json", "--", process.execPath, SELF, "watch", job.id];
   const paneFile = path.join(STATE_DIR, "tern-pane.json");
